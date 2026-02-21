@@ -33,6 +33,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/fixtures", label: "Fikstür", icon: CalendarDays },
     { href: "/stats", label: "İstatistikler", icon: Users },
     { href: "/chat", label: "Sohbet", icon: MessageSquare },
+    { href: "/carabag-cup", label: "Carabağ Cup", icon: Trophy },
+    { href: "/auren-lig-cup", label: "Auren Lig Cup", icon: Trophy },
   ];
 
   if (user && user.isAdmin === true) {

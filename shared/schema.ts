@@ -34,6 +34,8 @@ export const players = pgTable("players", {
   name: text("name").notNull(),
   goals: integer("goals").default(0).notNull(),
   assists: integer("assists").default(0).notNull(),
+  carabagCupGoals: integer("carabag_cup_goals").default(0).notNull(),
+  aurenLigCupGoals: integer("auren_lig_cup_goals").default(0).notNull(),
   cleanSheets: integer("clean_sheets").default(0).notNull(),
   yellowCards: integer("yellow_cards").default(0).notNull(),
   redCards: integer("red_cards").default(0).notNull(),
@@ -46,7 +48,9 @@ export const matches = pgTable("matches", {
   awayTeamId: integer("away_team_id").references(() => teams.id).notNull(),
   homeScore: integer("home_score"), // Null means not played yet
   awayScore: integer("away_score"), // Null means not played yet
-  week: integer("week").notNull(), // Match week/round
+  week: integer("week"), // Match week/round
+  tournament: text("tournament").default("league").notNull(), // 'league', 'carabag_cup', 'auren_lig_cup'
+  round: text("round"), // 'quarter_final', 'semi_final', 'final'
   isPlayed: boolean("is_played").default(false).notNull(),
   videoUrl: text("video_url"), // For match recordings/links
   date: timestamp("date"),

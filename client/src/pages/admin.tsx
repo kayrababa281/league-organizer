@@ -269,7 +269,7 @@ function PlayersManager() {
     createPlayer.mutate({ 
       name: newPlayerName, 
       teamId: parseInt(selectedTeamId),
-      goals: 0, assists: 0, cleanSheets: 0, yellowCards: 0, redCards: 0 
+      goals: 0, assists: 0, carabagCupGoals: 0, aurenLigCupGoals: 0, cleanSheets: 0, yellowCards: 0, redCards: 0 
     }, {
       onSuccess: () => setNewPlayerName("")
     });
@@ -355,6 +355,18 @@ function PlayersManager() {
                     className="h-8" />
                 </div>
                 <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Carabağ Gol</Label>
+                  <Input type="number" defaultValue={player.carabagCupGoals} 
+                    onBlur={(e) => updatePlayer.mutate({ id: player.id, carabagCupGoals: parseInt(e.target.value) })}
+                    className="h-8" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">Auren Gol</Label>
+                  <Input type="number" defaultValue={player.aurenLigCupGoals} 
+                    onBlur={(e) => updatePlayer.mutate({ id: player.id, aurenLigCupGoals: parseInt(e.target.value) })}
+                    className="h-8" />
+                </div>
+                <div className="space-y-1">
                   <Label className="text-xs text-muted-foreground">Asist</Label>
                   <Input type="number" defaultValue={player.assists} 
                     onBlur={(e) => updatePlayer.mutate({ id: player.id, assists: parseInt(e.target.value) })}
@@ -395,13 +407,17 @@ function FixturesManager() {
   const [awayTeam, setAwayTeam] = useState("");
   const [week, setWeek] = useState("1");
   const [date, setDate] = useState("");
+  const [tournament, setTournament] = useState("league");
+  const [round, setRound] = useState("quarter_final");
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     createMatch.mutate({
       homeTeamId: parseInt(homeTeam),
       awayTeamId: parseInt(awayTeam),
-      week: parseInt(week),
+      week: tournament === "league" ? parseInt(week) : null,
+      tournament,
+      round: tournament !== "league" ? round : null,
       date: date ? new Date(date) : undefined
     }, {
       onSuccess: () => {
@@ -415,11 +431,36 @@ function FixturesManager() {
       <Card>
         <CardHeader><CardTitle>Maç Oluştur</CardTitle></CardHeader>
         <CardContent>
-          <form onSubmit={handleCreate} className="grid md:grid-cols-5 gap-4 items-end">
+          <form onSubmit={handleCreate} className="grid md:grid-cols-6 gap-4 items-end">
             <div className="space-y-2">
-              <Label>Hafta</Label>
-              <Input type="number" value={week} onChange={e => setWeek(e.target.value)} min={1} required />
+              <Label>Turnuva</Label>
+              <Select value={tournament} onValueChange={setTournament}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="league">Lig</SelectItem>
+                  <SelectItem value="carabag_cup">Carabağ Cup</SelectItem>
+                  <SelectItem value="auren_lig_cup">Auren Lig Cup</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
+            {tournament !== "league" ? (
+              <div className="space-y-2">
+                <Label>Tur</Label>
+                <Select value={round} onValueChange={setRound}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="quarter_final">Çeyrek Final</SelectItem>
+                    <SelectItem value="semi_final">Yarı Final</SelectItem>
+                    <SelectItem value="final">Final</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <Label>Hafta</Label>
+                <Input type="number" value={week} onChange={e => setWeek(e.target.value)} min={1} required={tournament === "league"} />
+              </div>
+            )}
             <div className="space-y-2">
               <Label>Ev Sahibi</Label>
               <Select value={homeTeam} onValueChange={setHomeTeam}>
@@ -448,7 +489,11 @@ function FixturesManager() {
         {matches?.map(match => (
           <Card key={match.id} className="p-4">
              <div className="flex flex-col md:flex-row items-center gap-4">
-               <div className="text-sm font-bold w-20 text-center bg-muted py-1 rounded">Week {match.week}</div>
+               <div className="text-sm font-bold w-24 text-center bg-muted py-1 rounded">
+                 {match.tournament === 'league' ? `Week ${match.week}` : 
+                  match.round === 'quarter_final' ? 'Çeyrek F.' : 
+                  match.round === 'semi_final' ? 'Yarı F.' : 'Final'}
+               </div>
                <div className="flex-1 flex items-center justify-between gap-4">
                   <span className="font-semibold text-right flex-1">{teams?.find(t => t.id === match.homeTeamId)?.name}</span>
                   
