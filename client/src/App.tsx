@@ -12,6 +12,8 @@ import Stats from "@/pages/stats";
 import Chat from "@/pages/chat";
 import Admin from "@/pages/admin";
 import Login from "@/pages/login";
+import CarabagCup from "@/pages/carabag-cup";
+import AurenLigCup from "@/pages/auren-lig-cup";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -37,6 +39,12 @@ function Router() {
       </Route>
       <Route path="/admin">
         <Layout><Admin /></Layout>
+      </Route>
+      <Route path="/carabag-cup">
+        <Layout><CarabagCup /></Layout>
+      </Route>
+      <Route path="/auren-lig-cup">
+        <Layout><AurenLigCup /></Layout>
       </Route>
 
       <Route component={NotFound} />
