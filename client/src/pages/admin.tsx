@@ -305,12 +305,22 @@ function PlayersManager() {
         {filteredPlayers?.map(player => (
           <Card key={player.id} className="relative">
             <CardHeader className="pb-2">
-              <div className="flex justify-between items-start">
-                <div>
-                  <CardTitle className="text-lg">{player.name}</CardTitle>
-                  <CardDescription>{teams?.find(t => t.id === player.teamId)?.name}</CardDescription>
+              <div className="flex justify-between items-start gap-2">
+                <div className="flex-1 min-w-0 space-y-1">
+                  <Label className="text-xs text-muted-foreground">Oyuncu Adı</Label>
+                  <div className="flex gap-1.5">
+                    <Input
+                      defaultValue={player.name}
+                      onBlur={(e) => {
+                        const val = e.target.value.trim();
+                        if (val && val !== player.name) updatePlayer.mutate({ id: player.id, name: val });
+                      }}
+                      className="h-8 font-bold"
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">{teams?.find(t => t.id === player.teamId)?.name}</p>
                 </div>
-                <Button variant="ghost" size="icon" className="text-destructive h-8 w-8 shrink-0" onClick={() => deletePlayer.mutate(player.id)}>
+                <Button variant="ghost" size="icon" className="text-destructive h-8 w-8 shrink-0 mt-5" onClick={() => deletePlayer.mutate(player.id)}>
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
