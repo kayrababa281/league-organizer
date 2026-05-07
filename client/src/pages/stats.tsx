@@ -68,7 +68,7 @@ export default function Stats() {
     );
   };
 
-  const renderTable = (data: any[], valueKey: string) => (
+  const renderTable = (data: any[], valueKey: string, offset = 0) => (
     <Table>
       <TableHeader>
         <TableRow>
@@ -79,22 +79,26 @@ export default function Stats() {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {data.map((player, i) => (
-          <TableRow key={player.id} className="group hover:bg-primary/5 transition-colors">
-            <TableCell>
-              {i < 3 ? (
-                <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${MEDALS[i].bg} ${MEDALS[i].text} shadow-sm`}>
-                  {i + 1}
-                </div>
-              ) : (
-                <span className="text-sm font-medium text-muted-foreground pl-1">{i + 1}</span>
-              )}
-            </TableCell>
-            <TableCell className="font-semibold">{player.name}</TableCell>
-            <TableCell className="text-muted-foreground text-sm">{getTeamName(player.teamId)}</TableCell>
-            <TableCell className="text-right font-black text-primary text-lg tabular-nums">{(player as any)[valueKey]}</TableCell>
-          </TableRow>
-        ))}
+        {data.map((player, i) => {
+          const rank = i + offset;
+          const medal = MEDALS[rank];
+          return (
+            <TableRow key={player.id} className="group hover:bg-primary/5 transition-colors">
+              <TableCell>
+                {medal ? (
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black ${medal.bg} ${medal.text} shadow-sm`}>
+                    {rank + 1}
+                  </div>
+                ) : (
+                  <span className="text-sm font-medium text-muted-foreground pl-1">{rank + 1}</span>
+                )}
+              </TableCell>
+              <TableCell className="font-semibold">{player.name}</TableCell>
+              <TableCell className="text-muted-foreground text-sm">{getTeamName(player.teamId)}</TableCell>
+              <TableCell className="text-right font-black text-primary text-lg tabular-nums">{(player as any)[valueKey]}</TableCell>
+            </TableRow>
+          );
+        })}
         {data.length === 0 && (
           <TableRow>
             <TableCell colSpan={4} className="text-center py-10 text-muted-foreground">
@@ -177,7 +181,7 @@ export default function Stats() {
                           Diğerleri
                           <div className="h-px flex-1 bg-border/50" />
                         </div>
-                        {renderTable(data.slice(3), cat.key)}
+                        {renderTable(data.slice(3), cat.key, 3)}
                       </div>
                     )}
                     {data.length === 0 && renderTable([], cat.key)}
