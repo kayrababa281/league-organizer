@@ -122,6 +122,26 @@ export type AdminAuthResponse = {
   message?: string;
 };
 
+// === AI ASSISTANT TABLES ===
+
+export const aiConversations = pgTable("ai_conversations", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull().default("Yeni Sohbet"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const aiMessages = pgTable("ai_messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").references(() => aiConversations.id).notNull(),
+  role: text("role").notNull(), // 'user' | 'assistant'
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type AiConversation = typeof aiConversations.$inferSelect;
+export type AiMessage = typeof aiMessages.$inferSelect;
+
 // Tournament and round label helpers (shared)
 export const TOURNAMENT_LABELS: Record<string, string> = {
   league: "Lig",

@@ -15,6 +15,7 @@ import Login from "@/pages/login";
 import CarabagCup from "@/pages/carabag-cup";
 import AurenLigCup from "@/pages/auren-lig-cup";
 import CupPage from "@/pages/cup-page";
+import AurenAI from "@/pages/auren-ai";
 import NotFound from "@/pages/not-found";
 
 function Router() {
@@ -56,6 +57,9 @@ function Router() {
       </Route>
       <Route path="/super-cup">
         <Layout><CupPage tournament="super_cup" /></Layout>
+      </Route>
+      <Route path="/auren-ai">
+        <Layout><AurenAI /></Layout>
       </Route>
       <Route component={NotFound} />
     </Switch>

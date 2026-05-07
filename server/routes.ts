@@ -5,11 +5,38 @@ import { api } from "@shared/routes";
 import { z } from "zod";
 import session from "express-session";
 import MemoryStore from "memorystore";
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import express from "express";
+import OpenAI from "openai";
+import { db } from "./db";
+import { aiConversations, aiMessages } from "@shared/schema";
+
+const openai = new OpenAI({
+  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
+  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+});
+
+const AUREN_AI_SYSTEM_PROMPT = `Sen "Auren AI" - Auren Lig futbol lig yönetim sisteminin efsane yapay zeka asistanısın.
+
+Auren Lig hakkında bilgilerin:
+- Türkçe bir futbol ligi yönetim sistemidir
+- Turnuvalar: Lig, Carabağ Cup, Auren Lig Cup, Champions League, UEFA Avrupa Ligi, UEFA Süper Kupa
+- Her turnuvada Gol Krallığı ve Asist Krallığı takip edilmektedir
+- Admin panelinden takım, oyuncu ve maç yönetimi yapılabilir
+- Sohbet odası ve banlama sistemi mevcuttur
+
+Görevlerin:
+- Adminle Türkçe konuş
+- Lig yönetimi, futbol taktikleri, istatistik analizi konularında uzman yardım ver
+- Maç sonuçlarını analiz et, önerilerde bulun
+- Her türlü soruya zeki ve detaylı cevaplar ver
+- Kodlama, tasarım, strateji ne isterlerse yap
+- Cevaplarında Markdown formatını kullan (başlıklar, listeler, **kalın**)
+
+Sen sadece admin için çalışıyorsun. Ultra gelişmiş, efsane bir AI asistansın.`;;
 
 const storage_multer = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -372,6 +399,95 @@ export async function registerRoutes(
       await storage.updateTeamStats(team.id, stats);
     }
   }
+
+  // ===== AUREN AI ROUTES (Admin only) =====
+
+  // Get all AI conversations
+  app.get("/api/ai/conversations", async (req, res) => {
+    if (!req.session.isAdmin) return res.status(403).json({ message: "Yetkisiz erişim." });
+    const convs = await db.select().from(aiConversations).orderBy(desc(aiConversations.updatedAt));
+    res.json(convs);
+  });
+
+  // Create new conversation
+  app.post("/api/ai/conversations", async (req, res) => {
+    if (!req.session.isAdmin) return res.status(403).json({ message: "Yetkisiz erişim." });
+    const { title } = req.body;
+    const [conv] = await db.insert(aiConversations).values({ title: title || "Yeni Sohbet" }).returning();
+    res.status(201).json(conv);
+  });
+
+  // Delete a conversation
+  app.delete("/api/ai/conversations/:id", async (req, res) => {
+    if (!req.session.isAdmin) return res.status(403).json({ message: "Yetkisiz erişim." });
+    const id = parseInt(req.params.id);
+    await db.delete(aiMessages).where(eq(aiMessages.conversationId, id));
+    await db.delete(aiConversations).where(eq(aiConversations.id, id));
+    res.status(204).send();
+  });
+
+  // Get messages in a conversation
+  app.get("/api/ai/conversations/:id/messages", async (req, res) => {
+    if (!req.session.isAdmin) return res.status(403).json({ message: "Yetkisiz erişim." });
+    const id = parseInt(req.params.id);
+    const msgs = await db.select().from(aiMessages).where(eq(aiMessages.conversationId, id)).orderBy(aiMessages.createdAt);
+    res.json(msgs);
+  });
+
+  // Send a message (streaming)
+  app.post("/api/ai/conversations/:id/messages", async (req, res) => {
+    if (!req.session.isAdmin) return res.status(403).json({ message: "Yetkisiz erişim." });
+    const conversationId = parseInt(req.params.id);
+    const { content } = req.body;
+    if (!content?.trim()) return res.status(400).json({ message: "Mesaj boş olamaz." });
+
+    // Save user message
+    await db.insert(aiMessages).values({ conversationId, role: "user", content });
+
+    // Get conversation history
+    const history = await db.select().from(aiMessages).where(eq(aiMessages.conversationId, conversationId)).orderBy(aiMessages.createdAt);
+    const chatMessages = history.map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
+
+    // Update conversation updatedAt & title if first message
+    if (history.length === 1) {
+      const shortTitle = content.length > 40 ? content.slice(0, 40) + "…" : content;
+      await db.update(aiConversations).set({ title: shortTitle, updatedAt: new Date() }).where(eq(aiConversations.id, conversationId));
+    } else {
+      await db.update(aiConversations).set({ updatedAt: new Date() }).where(eq(aiConversations.id, conversationId));
+    }
+
+    // SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+
+    let fullResponse = "";
+    try {
+      const stream = await openai.chat.completions.create({
+        model: "gpt-5.4",
+        messages: [{ role: "system", content: AUREN_AI_SYSTEM_PROMPT }, ...chatMessages],
+        stream: true,
+        max_completion_tokens: 4096,
+      });
+
+      for await (const chunk of stream) {
+        const delta = chunk.choices[0]?.delta?.content || "";
+        if (delta) {
+          fullResponse += delta;
+          res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
+        }
+      }
+    } catch (err) {
+      res.write(`data: ${JSON.stringify({ error: "AI hatası oluştu." })}\n\n`);
+      res.end();
+      return;
+    }
+
+    // Save assistant message
+    await db.insert(aiMessages).values({ conversationId, role: "assistant", content: fullResponse });
+    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
+    res.end();
+  });
 
   // Seed data function (removed seed content to avoid fake stats)
   async function seed() {

@@ -15,6 +15,7 @@ import {
   Home,
   Star,
   Globe,
+  Sparkles,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
@@ -43,6 +44,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   ];
 
   if (user && user.isAdmin === true) {
+    navItems.push({ section: "Admin" });
+    navItems.push({ href: "/auren-ai", label: "Auren AI", icon: Sparkles });
     navItems.push({ href: "/admin", label: "Admin Panel", icon: Settings });
   }
 
