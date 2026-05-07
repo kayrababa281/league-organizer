@@ -45,7 +45,7 @@ export const players = pgTable("players", {
   redCards: integer("red_cards").default(0).notNull(),
 });
 
-// tournament values: 'league' | 'carabag_cup' | 'auren_lig_cup' | 'champions_league' | 'europa_league' | 'super_cup' | 'top_8' | 'top_12' | 'top_16'
+// tournament values: 'league' | 'carabag_cup' | 'auren_lig_cup' | 'champions_league' | 'europa_league' | 'super_cup'
 // round values: 'group_stage' | 'round_of_16' | 'round_of_12' | 'round_of_8' | 'quarter_final' | 'semi_final' | 'final'
 export const matches = pgTable("matches", {
   id: serial("id").primaryKey(),
@@ -125,16 +125,13 @@ export const TOURNAMENT_LABELS: Record<string, string> = {
   champions_league: "Champions League",
   europa_league: "UEFA Avrupa Ligi",
   super_cup: "UEFA Süper Kupa",
-  top_8: "İlk 8",
-  top_12: "İlk 12",
-  top_16: "İlk 16",
 };
 
 export const ROUND_LABELS: Record<string, string> = {
   group_stage: "Grup Aşaması",
-  round_of_16: "Son 16",
-  round_of_12: "Son 12",
-  round_of_8: "Son 8",
+  round_of_16: "İlk 16",
+  round_of_12: "İlk 12",
+  round_of_8: "İlk 8",
   quarter_final: "Çeyrek Final",
   semi_final: "Yarı Final",
   final: "Final",

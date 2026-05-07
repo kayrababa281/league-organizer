@@ -57,16 +57,6 @@ function Router() {
       <Route path="/super-cup">
         <Layout><CupPage tournament="super_cup" /></Layout>
       </Route>
-      <Route path="/top-8">
-        <Layout><CupPage tournament="top_8" /></Layout>
-      </Route>
-      <Route path="/top-12">
-        <Layout><CupPage tournament="top_12" /></Layout>
-      </Route>
-      <Route path="/top-16">
-        <Layout><CupPage tournament="top_16" /></Layout>
-      </Route>
-
       <Route component={NotFound} />
     </Switch>
   );

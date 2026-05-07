@@ -19,37 +19,31 @@ import { useToast } from "@/hooks/use-toast";
 import { TOURNAMENT_LABELS, ROUND_LABELS } from "@shared/schema";
 
 const ALL_TOURNAMENTS = [
-  { value: "league", label: "Lig" },
-  { value: "carabag_cup", label: "Carabağ Cup" },
-  { value: "auren_lig_cup", label: "Auren Lig Cup" },
+  { value: "league",           label: "Lig" },
+  { value: "carabag_cup",      label: "Carabağ Cup" },
+  { value: "auren_lig_cup",    label: "Auren Lig Cup" },
   { value: "champions_league", label: "Champions League" },
-  { value: "europa_league", label: "UEFA Avrupa Ligi" },
-  { value: "super_cup", label: "UEFA Süper Kupa" },
-  { value: "top_8", label: "İlk 8" },
-  { value: "top_12", label: "İlk 12" },
-  { value: "top_16", label: "İlk 16" },
+  { value: "europa_league",    label: "UEFA Avrupa Ligi" },
+  { value: "super_cup",        label: "UEFA Süper Kupa" },
 ];
 
 const ALL_ROUNDS = [
-  { value: "group_stage", label: "Grup Aşaması" },
-  { value: "round_of_16", label: "Son 16" },
-  { value: "round_of_12", label: "Son 12" },
-  { value: "round_of_8", label: "Son 8" },
+  { value: "group_stage",   label: "Grup Aşaması" },
+  { value: "round_of_16",   label: "İlk 16" },
+  { value: "round_of_12",   label: "İlk 12" },
+  { value: "round_of_8",    label: "İlk 8" },
   { value: "quarter_final", label: "Çeyrek Final" },
-  { value: "semi_final", label: "Yarı Final" },
-  { value: "final", label: "Final" },
+  { value: "semi_final",    label: "Yarı Final" },
+  { value: "final",         label: "Final" },
 ];
 
 // Map tournament → player goals field key
 const TOURNAMENT_GOAL_FIELDS: Record<string, { key: string; label: string }> = {
-  carabag_cup:        { key: "carabagCupGoals",        label: "Carabağ Cup Gol" },
-  auren_lig_cup:      { key: "aurenLigCupGoals",       label: "Auren Lig Cup Gol" },
-  champions_league:   { key: "championsLeagueGoals",   label: "Champions League Gol" },
-  europa_league:      { key: "europaLeagueGoals",      label: "UEFA Avrupa Ligi Gol" },
-  super_cup:          { key: "superCupGoals",           label: "Süper Kupa Gol" },
-  top_8:              { key: "top8Goals",               label: "İlk 8 Gol" },
-  top_12:             { key: "top12Goals",              label: "İlk 12 Gol" },
-  top_16:             { key: "top16Goals",              label: "İlk 16 Gol" },
+  carabag_cup:      { key: "carabagCupGoals",      label: "Carabağ Cup Gol" },
+  auren_lig_cup:    { key: "aurenLigCupGoals",     label: "Auren Lig Cup Gol" },
+  champions_league: { key: "championsLeagueGoals", label: "Champions League Gol" },
+  europa_league:    { key: "europaLeagueGoals",    label: "UEFA Avrupa Ligi Gol" },
+  super_cup:        { key: "superCupGoals",        label: "Süper Kupa Gol" },
 };
 
 function UsersManager() {

@@ -15,7 +15,6 @@ import {
   Home,
   Star,
   Globe,
-  Layers,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
@@ -41,9 +40,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/champions-league", label: "Champions League", icon: Star },
     { href: "/europa-league", label: "UEFA Avrupa Ligi", icon: Globe },
     { href: "/super-cup", label: "UEFA Süper Kupa", icon: Shield },
-    { href: "/top-16", label: "İlk 16", icon: Layers },
-    { href: "/top-12", label: "İlk 12", icon: Layers },
-    { href: "/top-8", label: "İlk 8", icon: Layers },
   ];
 
   if (user && user.isAdmin === true) {
