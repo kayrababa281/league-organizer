@@ -489,44 +489,86 @@ function FixturesManager() {
           <div className="text-center py-8 text-muted-foreground">Henüz maç yok.</div>
         )}
         {matches?.map(match => (
-          <Card key={match.id} className="p-4">
-            <div className="flex flex-col md:flex-row items-center gap-4">
-              <div className="text-xs font-bold w-40 text-center bg-muted py-1.5 rounded px-2 shrink-0 truncate">
-                {getMatchLabel(match)}
-              </div>
-              <div className="flex-1 flex items-center justify-between gap-4 min-w-0">
-                <span className="font-semibold text-right flex-1 truncate">{teams?.find(t => t.id === match.homeTeamId)?.name}</span>
-                <div className="flex items-center gap-2 shrink-0">
-                  <Input type="number" className="w-16 text-center" defaultValue={match.homeScore ?? undefined} id={`home-${match.id}`} />
-                  <span>-</span>
-                  <Input type="number" className="w-16 text-center" defaultValue={match.awayScore ?? undefined} id={`away-${match.id}`} />
-                </div>
-                <span className="font-semibold text-left flex-1 truncate">{teams?.find(t => t.id === match.awayTeamId)?.name}</span>
-              </div>
-              <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0 shrink-0">
-                <Input
-                  placeholder="Video URL"
-                  className="md:w-40"
-                  defaultValue={match.videoUrl ?? ""}
-                  id={`video-${match.id}`}
-                />
-                <Button size="sm" onClick={() => {
-                  const h = (document.getElementById(`home-${match.id}`) as HTMLInputElement).value;
-                  const a = (document.getElementById(`away-${match.id}`) as HTMLInputElement).value;
-                  const v = (document.getElementById(`video-${match.id}`) as HTMLInputElement).value;
-                  if (h === "" || a === "") return;
-                  updateMatchScore.mutate({ id: match.id, homeScore: parseInt(h), awayScore: parseInt(a), videoUrl: v || undefined });
-                }}>
-                  <Save className="w-4 h-4" />
-                </Button>
-                <Button variant="destructive" size="sm" onClick={() => deleteMatch.mutate(match.id)}>
-                  <Trash2 className="w-4 h-4" />
-                </Button>
-              </div>
-            </div>
-          </Card>
+          <MatchEditCard
+            key={`${match.id}-${match.homeScore}-${match.awayScore}-${match.videoUrl}`}
+            match={match}
+            teams={teams}
+            getMatchLabel={getMatchLabel}
+            onSave={(homeScore, awayScore, videoUrl) =>
+              updateMatchScore.mutate({ id: match.id, homeScore, awayScore, videoUrl: videoUrl || undefined })
+            }
+            onDelete={() => deleteMatch.mutate(match.id)}
+          />
         ))}
       </div>
     </div>
+  );
+}
+
+function MatchEditCard({ match, teams, getMatchLabel, onSave, onDelete }: {
+  match: any;
+  teams: any;
+  getMatchLabel: (m: any) => string;
+  onSave: (home: number, away: number, video: string) => void;
+  onDelete: () => void;
+}) {
+  const [homeScore, setHomeScore] = useState<string>(match.homeScore != null ? String(match.homeScore) : "");
+  const [awayScore, setAwayScore] = useState<string>(match.awayScore != null ? String(match.awayScore) : "");
+  const [videoUrl, setVideoUrl] = useState<string>(match.videoUrl ?? "");
+
+  return (
+    <Card className="p-4">
+      <div className="flex flex-col md:flex-row items-center gap-4">
+        <div className="text-xs font-bold w-40 text-center bg-muted py-1.5 rounded px-2 shrink-0 truncate">
+          {getMatchLabel(match)}
+        </div>
+        <div className="flex-1 flex items-center justify-between gap-4 min-w-0">
+          <span className="font-semibold text-right flex-1 truncate">
+            {teams?.find((t: any) => t.id === match.homeTeamId)?.name}
+          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <Input
+              type="number"
+              className="w-16 text-center"
+              value={homeScore}
+              onChange={e => setHomeScore(e.target.value)}
+              min={0}
+            />
+            <span className="font-bold text-muted-foreground">-</span>
+            <Input
+              type="number"
+              className="w-16 text-center"
+              value={awayScore}
+              onChange={e => setAwayScore(e.target.value)}
+              min={0}
+            />
+          </div>
+          <span className="font-semibold text-left flex-1 truncate">
+            {teams?.find((t: any) => t.id === match.awayTeamId)?.name}
+          </span>
+        </div>
+        <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0 shrink-0">
+          <Input
+            placeholder="Video URL"
+            className="md:w-44"
+            value={videoUrl}
+            onChange={e => setVideoUrl(e.target.value)}
+          />
+          <Button
+            size="sm"
+            onClick={() => {
+              if (homeScore === "" || awayScore === "") return;
+              onSave(parseInt(homeScore), parseInt(awayScore), videoUrl);
+            }}
+            title="Kaydet"
+          >
+            <Save className="w-4 h-4" />
+          </Button>
+          <Button variant="destructive" size="sm" onClick={onDelete} title="Sil">
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }

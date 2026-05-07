@@ -75,7 +75,6 @@ export default function Login() {
       }
     } else {
       try {
-        await logout(); // Clear any existing session before logging in
         await loginAsync({ username, password });
         setLocation("/");
       } catch (err) {}
@@ -107,11 +106,11 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Kullanıcı Adı</Label>
-              <Input id="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
+              <Input id="username" autoComplete="username" value={username} onChange={(e) => setUsername(e.target.value)} required />
             </div>
             <div className="space-y-2">
               <Label htmlFor="password">Şifre</Label>
-              <Input id="password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+              <Input id="password" type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} required />
             </div>
             
             {isRegister && (

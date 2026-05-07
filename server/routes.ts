@@ -67,7 +67,7 @@ export async function registerRoutes(
     cookie: { maxAge: 86400000 }
   }));
 
-  // Middleware to assign anonymous ID if not exists
+  // Middleware to assign session identity
   let nextAnonymousId = 1;
   app.use(async (req, res, next) => {
     if (!req.session.anonymousId) {
@@ -76,20 +76,13 @@ export async function registerRoutes(
     if (!req.session.identifier) {
       req.session.identifier = req.ip || `session-${req.session.id}`;
     }
-    
-    // Safety check: ensure isAdmin is false unless explicitly set by login
     if (req.session.isAdmin !== true) {
       req.session.isAdmin = false;
     }
 
-    // Assign anonymous ID if not exists
-    if (!req.session.anonymousId) {
-      req.session.anonymousId = nextAnonymousId++;
-    }
-
     const isBanned = await storage.isBanned(req.session.identifier!);
     if (isBanned && req.path.startsWith('/api/messages') && req.method === 'POST') {
-      return res.status(403).json({ message: "You are banned from chat." });
+      return res.status(403).json({ message: "Sohbetten yasaklandınız." });
     }
 
     next();
@@ -305,6 +298,7 @@ export async function registerRoutes(
       content,
       senderName,
       senderAvatar,
+      isAdmin: req.session.isAdmin === true,
     });
     res.status(201).json(message);
   });

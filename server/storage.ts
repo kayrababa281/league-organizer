@@ -164,7 +164,7 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(messages).orderBy(asc(messages.createdAt));
   }
 
-  async createMessage(message: InsertMessage): Promise<Message> {
+  async createMessage(message: InsertMessage & { isAdmin?: boolean }): Promise<Message> {
     const [newMessage] = await db.insert(messages).values(message).returning();
     return newMessage;
   }
