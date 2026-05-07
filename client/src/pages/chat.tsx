@@ -2,7 +2,7 @@ import { useChat } from "@/hooks/use-chat";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { MessageSquare, Send, Trash2, Crown } from "lucide-react";
+import { MessageSquare, Send, Trash2, Crown, Shield } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import { format } from "date-fns";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -27,49 +27,83 @@ export default function Chat() {
   };
 
   return (
-    <div className="h-[calc(100vh-140px)] md:h-[calc(100vh-80px)] flex flex-col gap-4">
-      <div className="flex items-center gap-3">
-        <MessageSquare className="w-8 h-8 text-primary" />
-        <h1 className="text-3xl font-black font-display">Sohbet Odası</h1>
+    <div className="h-[calc(100vh-140px)] md:h-[calc(100vh-80px)] flex flex-col gap-4 animate-slide-up">
+      {/* Header */}
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="p-2 rounded-xl bg-primary/10 glow-primary-sm">
+          <MessageSquare className="w-7 h-7 text-primary" />
+        </div>
+        <div>
+          <h1 className="text-3xl font-black font-display">Sohbet Odası</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {messages?.length ?? 0} mesaj
+          </p>
+        </div>
       </div>
 
-      <div className="flex-1 bg-card border rounded-2xl shadow-sm flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4 space-y-4" ref={scrollRef}>
+      {/* Chat box */}
+      <div className="flex-1 bg-card border border-border/50 rounded-2xl shadow-xl card-glass flex flex-col overflow-hidden">
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-5" ref={scrollRef}>
+          {messages?.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground/40 gap-3">
+              <MessageSquare className="w-12 h-12" />
+              <p className="text-sm font-medium">Henüz mesaj yok. İlk sen yaz!</p>
+            </div>
+          )}
           {messages?.map((msg) => {
             const isMe = msg.senderName === user?.identifier;
+            const isAdminMsg = msg.isAdmin;
+
             return (
-              <div key={msg.id} className={`flex gap-3 ${isMe ? "flex-row-reverse" : "flex-row"}`}>
-                <Avatar className="h-8 w-8 shrink-0 mt-1 border">
-                  <AvatarImage src={msg.senderAvatar || ""} />
-                  <AvatarFallback className="text-[10px] font-bold">
-                    {msg.senderName.substring(0, 2).toUpperCase()}
-                  </AvatarFallback>
-                </Avatar>
-                
-                <div className={`flex flex-col ${isMe ? "items-end" : "items-start"}`}>
-                  <div className={`flex items-center gap-2 mb-1 ${isMe ? "flex-row-reverse" : ""}`}>
-                    <span className={`text-xs font-bold ${msg.isAdmin ? "text-primary flex items-center gap-1" : "text-muted-foreground"}`}>
-                      {msg.isAdmin && <Crown className="w-3 h-3" />}
+              <div key={msg.id} className={`flex gap-3 ${isMe ? "flex-row-reverse" : "flex-row"} group`}>
+                {/* Avatar */}
+                <div className="relative shrink-0">
+                  <Avatar className={`h-9 w-9 border-2 shadow-sm ${isAdminMsg ? "border-primary/50" : "border-border/30"}`}>
+                    <AvatarImage src={msg.senderAvatar || ""} />
+                    <AvatarFallback className={`text-[10px] font-black ${isAdminMsg ? "bg-primary/20 text-primary" : "bg-muted"}`}>
+                      {msg.senderName.substring(0, 2).toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  {isAdminMsg && (
+                    <div className="absolute -bottom-1 -right-1 w-4 h-4 bg-primary rounded-full flex items-center justify-center shadow">
+                      <Crown className="w-2.5 h-2.5 text-white" />
+                    </div>
+                  )}
+                </div>
+
+                <div className={`flex flex-col max-w-[70%] ${isMe ? "items-end" : "items-start"}`}>
+                  {/* Name + time */}
+                  <div className={`flex items-center gap-2 mb-1.5 ${isMe ? "flex-row-reverse" : ""}`}>
+                    <span className={`text-xs font-bold ${isAdminMsg ? "text-primary" : "text-muted-foreground"}`}>
                       {msg.senderName}
                     </span>
-                    <span className="text-[10px] text-muted-foreground/60">
+                    {isAdminMsg && (
+                      <span className="text-[9px] font-bold bg-primary/10 text-primary border border-primary/20 px-1.5 py-0.5 rounded-full uppercase tracking-wide flex items-center gap-0.5">
+                        <Shield className="w-2 h-2" /> Admin
+                      </span>
+                    )}
+                    <span className="text-[10px] text-muted-foreground/50">
                       {format(new Date(msg.createdAt), "HH:mm")}
                     </span>
-                    
                     {user?.isAdmin && (
-                      <div className="flex gap-1 ml-2">
-                        <button onClick={() => deleteMessage.mutate(msg.id)} className="text-destructive hover:bg-destructive/10 p-1 rounded">
-                          <Trash2 className="w-3 h-3" />
-                        </button>
-                      </div>
+                      <button
+                        onClick={() => deleteMessage.mutate(msg.id)}
+                        className="opacity-0 group-hover:opacity-100 text-destructive hover:bg-destructive/10 p-1 rounded-md transition-all duration-150"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
                     )}
                   </div>
-                  
+
+                  {/* Bubble */}
                   <div className={`
-                    px-4 py-2 rounded-2xl max-w-[280px] md:max-w-md text-sm shadow-sm
-                    ${isMe 
-                      ? "bg-primary text-primary-foreground rounded-tr-none" 
-                      : "bg-muted text-foreground rounded-tl-none"}
+                    relative px-4 py-2.5 rounded-2xl text-sm shadow-sm leading-relaxed
+                    ${isMe
+                      ? "bg-primary text-primary-foreground rounded-tr-sm glow-primary-sm"
+                      : isAdminMsg
+                        ? "bg-primary/15 text-foreground border border-primary/20 rounded-tl-sm"
+                        : "bg-muted text-foreground rounded-tl-sm"}
                   `}>
                     {msg.content}
                   </div>
@@ -79,16 +113,23 @@ export default function Chat() {
           })}
         </div>
 
-        <div className="p-4 border-t bg-muted/30">
-          <form onSubmit={handleSubmit} className="flex gap-2">
-            <Input 
+        {/* Input */}
+        <div className="p-4 border-t border-border/30 bg-muted/10 shrink-0">
+          <form onSubmit={handleSubmit} className="flex gap-3 items-center">
+            <Input
               value={content}
               onChange={(e) => setContent(e.target.value)}
-              placeholder="Mesaj yaz..." 
-              className="bg-background rounded-full pl-6 border-transparent focus:border-primary shadow-sm"
+              placeholder="Mesajını yaz..."
+              className="bg-card/80 rounded-full pl-5 border-border/50 focus:border-primary/50 shadow-sm h-11"
               data-testid="input-chat-message"
             />
-            <Button type="submit" size="icon" className="rounded-full w-10 h-10 shrink-0" disabled={sendMessage.isPending} data-testid="button-send-message">
+            <Button
+              type="submit"
+              size="icon"
+              className="rounded-full w-11 h-11 shrink-0 glow-primary-sm shadow-lg transition-all duration-200 hover:scale-105"
+              disabled={sendMessage.isPending || !content.trim()}
+              data-testid="button-send-message"
+            >
               <Send className="w-4 h-4 ml-0.5" />
             </Button>
           </form>
