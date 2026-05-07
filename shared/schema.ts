@@ -13,11 +13,10 @@ import { z } from "zod";
 
 // === TABLE DEFINITIONS ===
 
-// Teams table - stores team info and cached stats for the league table
 export const teams = pgTable("teams", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  logoUrl: text("logo_url"), // Optional logo
+  logoUrl: text("logo_url"),
   played: integer("played").default(0).notNull(),
   wins: integer("wins").default(0).notNull(),
   draws: integer("draws").default(0).notNull(),
@@ -27,7 +26,6 @@ export const teams = pgTable("teams", {
   points: integer("points").default(0).notNull(),
 });
 
-// Players table - for manual stats (goals, assists, cards, etc.)
 export const players = pgTable("players", {
   id: serial("id").primaryKey(),
   teamId: integer("team_id").references(() => teams.id).notNull(),
@@ -36,40 +34,45 @@ export const players = pgTable("players", {
   assists: integer("assists").default(0).notNull(),
   carabagCupGoals: integer("carabag_cup_goals").default(0).notNull(),
   aurenLigCupGoals: integer("auren_lig_cup_goals").default(0).notNull(),
+  championsLeagueGoals: integer("champions_league_goals").default(0).notNull(),
+  europaLeagueGoals: integer("europa_league_goals").default(0).notNull(),
+  superCupGoals: integer("super_cup_goals").default(0).notNull(),
+  top8Goals: integer("top8_goals").default(0).notNull(),
+  top12Goals: integer("top12_goals").default(0).notNull(),
+  top16Goals: integer("top16_goals").default(0).notNull(),
   cleanSheets: integer("clean_sheets").default(0).notNull(),
   yellowCards: integer("yellow_cards").default(0).notNull(),
   redCards: integer("red_cards").default(0).notNull(),
 });
 
-// Matches/Fixtures table
+// tournament values: 'league' | 'carabag_cup' | 'auren_lig_cup' | 'champions_league' | 'europa_league' | 'super_cup' | 'top_8' | 'top_12' | 'top_16'
+// round values: 'group_stage' | 'round_of_16' | 'round_of_12' | 'round_of_8' | 'quarter_final' | 'semi_final' | 'final'
 export const matches = pgTable("matches", {
   id: serial("id").primaryKey(),
   homeTeamId: integer("home_team_id").references(() => teams.id).notNull(),
   awayTeamId: integer("away_team_id").references(() => teams.id).notNull(),
-  homeScore: integer("home_score"), // Null means not played yet
-  awayScore: integer("away_score"), // Null means not played yet
-  week: integer("week"), // Match week/round
-  tournament: text("tournament").default("league").notNull(), // 'league', 'carabag_cup', 'auren_lig_cup'
-  round: text("round"), // 'quarter_final', 'semi_final', 'final'
+  homeScore: integer("home_score"),
+  awayScore: integer("away_score"),
+  week: integer("week"),
+  tournament: text("tournament").default("league").notNull(),
+  round: text("round"),
   isPlayed: boolean("is_played").default(false).notNull(),
-  videoUrl: text("video_url"), // For match recordings/links
+  videoUrl: text("video_url"),
   date: timestamp("date"),
 });
 
-// Chat messages
 export const messages = pgTable("messages", {
   id: serial("id").primaryKey(),
   content: text("content").notNull(),
-  senderName: text("sender_name").notNull(), // "Anonymous X" or "Kralbaba12"
-  senderAvatar: text("sender_avatar"), // Profil fotoğrafı
+  senderName: text("sender_name").notNull(),
+  senderAvatar: text("sender_avatar"),
   isAdmin: boolean("is_admin").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-// Banned users (simple IP or session based ban)
 export const bannedUsers = pgTable("banned_users", {
   id: serial("id").primaryKey(),
-  identifier: text("identifier").notNull().unique(), // IP or session ID
+  identifier: text("identifier").notNull().unique(),
   reason: text("reason"),
   bannedAt: timestamp("banned_at").defaultNow().notNull(),
 });
@@ -77,39 +80,27 @@ export const bannedUsers = pgTable("banned_users", {
 // === SCHEMAS ===
 
 export const insertTeamSchema = createInsertSchema(teams).omit({ 
-  id: true, 
-  played: true, 
-  wins: true, 
-  draws: true, 
-  losses: true, 
-  goalsFor: true, 
-  goalsAgainst: true, 
-  points: true 
+  id: true, played: true, wins: true, draws: true, losses: true, 
+  goalsFor: true, goalsAgainst: true, points: true 
 });
 
 export const insertPlayerSchema = createInsertSchema(players).omit({ id: true });
 export const insertMatchSchema = createInsertSchema(matches).omit({ id: true, isPlayed: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, createdAt: true, isAdmin: true });
-
 export const insertUserSchema = createInsertSchema(users).omit({ id: true, isAdmin: true });
+
 export type User = typeof users.$inferSelect;
 export type InsertUser = z.infer<typeof insertUserSchema>;
-
 export type Team = typeof teams.$inferSelect;
 export type InsertTeam = z.infer<typeof insertTeamSchema>;
-
 export type Player = typeof players.$inferSelect;
 export type InsertPlayer = z.infer<typeof insertPlayerSchema>;
-
 export type Match = typeof matches.$inferSelect;
 export type InsertMatch = z.infer<typeof insertMatchSchema>;
-
 export type Message = typeof messages.$inferSelect;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
-
 export type BannedUser = typeof bannedUsers.$inferSelect;
 
-// Request Types
 export type UpdateMatchScoreRequest = {
   homeScore: number;
   awayScore: number;
@@ -124,4 +115,27 @@ export type AdminAuthResponse = {
   success: boolean;
   isAdmin: boolean;
   message?: string;
+};
+
+// Tournament and round label helpers (shared)
+export const TOURNAMENT_LABELS: Record<string, string> = {
+  league: "Lig",
+  carabag_cup: "Carabağ Cup",
+  auren_lig_cup: "Auren Lig Cup",
+  champions_league: "Champions League",
+  europa_league: "UEFA Avrupa Ligi",
+  super_cup: "UEFA Süper Kupa",
+  top_8: "İlk 8",
+  top_12: "İlk 12",
+  top_16: "İlk 16",
+};
+
+export const ROUND_LABELS: Record<string, string> = {
+  group_stage: "Grup Aşaması",
+  round_of_16: "Son 16",
+  round_of_12: "Son 12",
+  round_of_8: "Son 8",
+  quarter_final: "Çeyrek Final",
+  semi_final: "Yarı Final",
+  final: "Final",
 };

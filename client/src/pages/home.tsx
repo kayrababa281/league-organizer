@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Trophy, Medal, Flame, Calendar, Video, Shield } from "lucide-react";
 import { format } from "date-fns";
 import { tr } from "date-fns/locale";
+import { TOURNAMENT_LABELS, ROUND_LABELS } from "@shared/schema";
 
 export default function Home() {
   const { teams } = useTeams();
@@ -30,8 +31,10 @@ export default function Home() {
     .sort((a, b) => b.id - a.id)
     .slice(0, 3);
 
-  // Calculate current week based on played matches
-  const currentWeek = matches?.reduce((max, m) => (m.isPlayed && m.week > max ? m.week : max), 0) || 1;
+  // Only count league matches for "current week"
+  const currentWeek = (matches || [])
+    .filter(m => m.isPlayed && m.tournament === "league" && m.week != null)
+    .reduce((max, m) => (m.week! > max ? m.week! : max), 0) || 1;
 
   return (
     <div className="space-y-8">
@@ -71,28 +74,28 @@ export default function Home() {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <StatCard 
-          title="GOL KRALI" 
-          player={topScorer} 
-          value={topScorer?.goals} 
-          unit="Gol" 
-          icon={<Flame className="w-6 h-6 text-orange-500" />} 
+        <StatCard
+          title="GOL KRALI"
+          player={topScorer}
+          value={topScorer?.goals}
+          unit="Gol"
+          icon={<Flame className="w-6 h-6 text-orange-500" />}
           teamName={teams?.find(t => t.id === topScorer?.teamId)?.name}
         />
-        <StatCard 
-          title="ASİST KRALI" 
-          player={topAssister} 
-          value={topAssister?.assists} 
-          unit="Asist" 
-          icon={<Medal className="w-6 h-6 text-blue-500" />} 
+        <StatCard
+          title="ASİST KRALI"
+          player={topAssister}
+          value={topAssister?.assists}
+          unit="Asist"
+          icon={<Medal className="w-6 h-6 text-blue-500" />}
           teamName={teams?.find(t => t.id === topAssister?.teamId)?.name}
         />
-        <StatCard 
-          title="GOL YENMEYEN" 
-          player={topCleanSheet} 
-          value={topCleanSheet?.cleanSheets} 
-          unit="Maç" 
-          icon={<Shield className="w-6 h-6 text-green-500" />} 
+        <StatCard
+          title="GOL YENMEYEN"
+          player={topCleanSheet}
+          value={topCleanSheet?.cleanSheets}
+          unit="Maç"
+          icon={<Shield className="w-6 h-6 text-green-500" />}
           teamName={teams?.find(t => t.id === topCleanSheet?.teamId)?.name}
         />
       </div>
@@ -108,12 +111,20 @@ export default function Home() {
             recentMatches.map((match) => {
               const home = teams?.find(t => t.id === match.homeTeamId);
               const away = teams?.find(t => t.id === match.awayTeamId);
+              const matchLabel = match.tournament === "league" && match.week != null
+                ? `${match.week}. Hafta`
+                : match.round
+                  ? `${TOURNAMENT_LABELS[match.tournament] || match.tournament} — ${ROUND_LABELS[match.round] || match.round}`
+                  : TOURNAMENT_LABELS[match.tournament] || match.tournament;
+
               return (
                 <Card key={match.id} className="overflow-hidden border-border/50 hover:border-primary/50 transition-colors">
                   <CardContent className="p-0">
                     <div className="flex items-center justify-between p-4 bg-muted/30">
                       <span className="text-xs font-medium text-muted-foreground">
-                        {match.date ? format(new Date(match.date), 'd MMM yyyy', { locale: tr }) : `${match.week}. Hafta`}
+                        {match.date
+                          ? format(new Date(match.date), 'd MMM yyyy', { locale: tr })
+                          : matchLabel}
                       </span>
                       {match.videoUrl && (
                         <a href={match.videoUrl} target="_blank" rel="noreferrer" className="text-xs flex items-center gap-1 text-primary hover:underline">

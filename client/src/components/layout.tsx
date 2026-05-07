@@ -1,18 +1,21 @@
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { 
-  Trophy, 
-  CalendarDays, 
-  Users, 
-  Shield, 
-  MessageSquare, 
-  Settings, 
-  LogOut, 
+import {
+  Trophy,
+  CalendarDays,
+  Users,
+  Shield,
+  MessageSquare,
+  Settings,
+  LogOut,
   Menu,
   X,
   Moon,
   Sun,
-  Home
+  Home,
+  Star,
+  Globe,
+  Layers,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTheme } from "next-themes";
@@ -24,7 +27,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   const [isOpen, setIsOpen] = useState(false);
   const { theme, setTheme } = useTheme();
 
-  // Close mobile menu on route change
   useEffect(() => setIsOpen(false), [location]);
 
   const navItems = [
@@ -33,8 +35,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
     { href: "/fixtures", label: "Fikstür", icon: CalendarDays },
     { href: "/stats", label: "İstatistikler", icon: Users },
     { href: "/chat", label: "Sohbet", icon: MessageSquare },
+    { section: "Kupalar" },
     { href: "/carabag-cup", label: "Carabağ Cup", icon: Trophy },
     { href: "/auren-lig-cup", label: "Auren Lig Cup", icon: Trophy },
+    { href: "/champions-league", label: "Champions League", icon: Star },
+    { href: "/europa-league", label: "UEFA Avrupa Ligi", icon: Globe },
+    { href: "/super-cup", label: "UEFA Süper Kupa", icon: Shield },
+    { href: "/top-16", label: "İlk 16", icon: Layers },
+    { href: "/top-12", label: "İlk 12", icon: Layers },
+    { href: "/top-8", label: "İlk 8", icon: Layers },
   ];
 
   if (user && user.isAdmin === true) {
@@ -50,7 +59,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           AUREN LIG
         </Link>
         <div className="flex items-center gap-2">
-           <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
+          <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
             {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
           </Button>
           <button onClick={() => setIsOpen(!isOpen)} className="p-2">
@@ -65,43 +74,52 @@ export function Layout({ children }: { children: React.ReactNode }) {
         md:relative md:translate-x-0
         ${isOpen ? "translate-x-0" : "-translate-x-full"}
       `}>
-        <div className="flex flex-col h-full p-6">
-          <div className="hidden md:flex items-center justify-between mb-8">
+        <div className="flex flex-col h-full p-4 overflow-y-auto">
+          <div className="hidden md:flex items-center justify-between mb-6 px-2">
             <Link href="/" className="flex items-center gap-2 font-display text-2xl font-black text-primary hover:opacity-80 transition-opacity">
               <Trophy className="h-8 w-8" />
               <span>AUREN</span>
             </Link>
           </div>
 
-          <nav className="space-y-2 flex-1">
-            {navItems.map((item) => {
+          <nav className="space-y-1 flex-1">
+            {navItems.map((item: any, idx) => {
+              if (item.section) {
+                return (
+                  <div key={idx} className="pt-3 pb-1 px-4">
+                    <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground/60">
+                      {item.section}
+                    </span>
+                  </div>
+                );
+              }
               const Icon = item.icon;
               const isActive = location === item.href;
               return (
                 <Link key={item.href} href={item.href} className={`
-                  flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group
-                  ${isActive 
-                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 font-semibold" 
+                  flex items-center gap-3 px-4 py-2.5 rounded-xl transition-all duration-200 group
+                  ${isActive
+                    ? "bg-primary text-primary-foreground shadow-lg shadow-primary/25 font-semibold"
                     : "text-muted-foreground hover:bg-muted hover:text-foreground font-medium"}
                 `}>
-                  <Icon className={`h-5 w-5 ${isActive ? "" : "group-hover:scale-110 transition-transform"}`} />
-                  {item.label}
+                  <Icon className={`h-4 w-4 shrink-0 ${isActive ? "" : "group-hover:scale-110 transition-transform"}`} />
+                  <span className="text-sm">{item.label}</span>
                 </Link>
               );
             })}
           </nav>
 
-          <div className="mt-auto pt-6 border-t space-y-4">
-             <div className="hidden md:flex items-center justify-between px-2">
-                <span className="text-sm font-medium text-muted-foreground">Tema</span>
-                <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="rounded-full">
-                  {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-                </Button>
-             </div>
+          <div className="mt-auto pt-4 border-t space-y-3">
+            <div className="hidden md:flex items-center justify-between px-2">
+              <span className="text-sm font-medium text-muted-foreground">Tema</span>
+              <Button variant="ghost" size="icon" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')} className="rounded-full">
+                {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+              </Button>
+            </div>
 
             {user && (user.userId || user.isAdmin) ? (
               <div className="flex items-center justify-between bg-muted/50 p-3 rounded-lg border">
-                <div className="flex flex-col">
+                <div className="flex flex-col min-w-0">
                   <span className="text-sm font-bold text-foreground truncate max-w-[120px]">
                     {user.identifier}
                   </span>
@@ -109,12 +127,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
                     {user.isAdmin ? "Yönetici" : "Üye"}
                   </span>
                 </div>
-                <button 
+                <button
                   onClick={async () => {
                     await logout();
                     window.location.href = "/";
                   }}
-                  className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors"
+                  className="p-2 text-destructive hover:bg-destructive/10 rounded-lg transition-colors shrink-0"
                 >
                   <LogOut className="h-4 w-4" />
                 </button>
@@ -135,7 +153,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </main>
 
-      {/* Cinematic Theme Toggle in bottom right */}
+      {/* Theme Toggle floating button */}
       <div className="fixed bottom-6 right-6 z-[100]">
         <Button
           variant="outline"
@@ -149,10 +167,10 @@ export function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </Button>
       </div>
-      
+
       {/* Overlay for mobile sidebar */}
       {isOpen && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/50 z-40 md:hidden"
           onClick={() => setIsOpen(false)}
         />

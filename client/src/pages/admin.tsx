@@ -10,21 +10,54 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useTeams } from "@/hooks/use-teams";
 import { usePlayers } from "@/hooks/use-players";
 import { useMatches } from "@/hooks/use-matches";
-import { Trash2, Plus, Save, Search, UserCog, Ban, ShieldAlert, Users as UsersIcon } from "lucide-react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Trash2, Plus, Save, Search } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { queryClient } from "@/lib/queryClient";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useToast } from "@/hooks/use-toast";
+import { TOURNAMENT_LABELS, ROUND_LABELS } from "@shared/schema";
+
+const ALL_TOURNAMENTS = [
+  { value: "league", label: "Lig" },
+  { value: "carabag_cup", label: "Carabağ Cup" },
+  { value: "auren_lig_cup", label: "Auren Lig Cup" },
+  { value: "champions_league", label: "Champions League" },
+  { value: "europa_league", label: "UEFA Avrupa Ligi" },
+  { value: "super_cup", label: "UEFA Süper Kupa" },
+  { value: "top_8", label: "İlk 8" },
+  { value: "top_12", label: "İlk 12" },
+  { value: "top_16", label: "İlk 16" },
+];
+
+const ALL_ROUNDS = [
+  { value: "group_stage", label: "Grup Aşaması" },
+  { value: "round_of_16", label: "Son 16" },
+  { value: "round_of_12", label: "Son 12" },
+  { value: "round_of_8", label: "Son 8" },
+  { value: "quarter_final", label: "Çeyrek Final" },
+  { value: "semi_final", label: "Yarı Final" },
+  { value: "final", label: "Final" },
+];
+
+// Map tournament → player goals field key
+const TOURNAMENT_GOAL_FIELDS: Record<string, { key: string; label: string }> = {
+  carabag_cup:        { key: "carabagCupGoals",        label: "Carabağ Cup Gol" },
+  auren_lig_cup:      { key: "aurenLigCupGoals",       label: "Auren Lig Cup Gol" },
+  champions_league:   { key: "championsLeagueGoals",   label: "Champions League Gol" },
+  europa_league:      { key: "europaLeagueGoals",      label: "UEFA Avrupa Ligi Gol" },
+  super_cup:          { key: "superCupGoals",           label: "Süper Kupa Gol" },
+  top_8:              { key: "top8Goals",               label: "İlk 8 Gol" },
+  top_12:             { key: "top12Goals",              label: "İlk 12 Gol" },
+  top_16:             { key: "top16Goals",              label: "İlk 16 Gol" },
+};
 
 function UsersManager() {
-  const { data: users, refetch } = useQuery<any[]>({ queryKey: ["/api/admin/users"] });
+  const { data: users } = useQuery<any[]>({ queryKey: ["/api/admin/users"] });
   const { toast } = useToast();
 
   const deleteUser = useMutation({
-    mutationFn: async (id: number) => {
-      await apiRequest("DELETE", `/api/admin/users/${id}`);
-    },
+    mutationFn: async (id: number) => apiRequest("DELETE", `/api/admin/users/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({ title: "Başarılı", description: "Üye silindi" });
@@ -32,9 +65,7 @@ function UsersManager() {
   });
 
   const updateUser = useMutation({
-    mutationFn: async ({ id, ...updates }: any) => {
-      await apiRequest("PATCH", `/api/admin/users/${id}`, updates);
-    },
+    mutationFn: async ({ id, ...updates }: any) => apiRequest("PATCH", `/api/admin/users/${id}`, updates),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       toast({ title: "Başarılı", description: "Üye güncellendi" });
@@ -42,12 +73,8 @@ function UsersManager() {
   });
 
   const banUser = useMutation({
-    mutationFn: async (identifier: string) => {
-      await apiRequest("POST", "/api/chat/ban", { identifier });
-    },
-    onSuccess: () => {
-      toast({ title: "Başarılı", description: "Kullanıcı banlandı" });
-    }
+    mutationFn: async (identifier: string) => apiRequest("POST", "/api/chat/ban", { identifier }),
+    onSuccess: () => toast({ title: "Başarılı", description: "Kullanıcı banlandı" })
   });
 
   return (
@@ -60,11 +87,11 @@ function UsersManager() {
                 <AvatarImage src={u.avatarUrl || ""} />
                 <AvatarFallback>{u.username.substring(0, 2).toUpperCase()}</AvatarFallback>
               </Avatar>
-              <div className="flex-1">
-                <CardTitle className="text-lg">{u.username}</CardTitle>
+              <div className="flex-1 min-w-0">
+                <CardTitle className="text-lg truncate">{u.username}</CardTitle>
                 <CardDescription className="text-xs truncate">{u.bio || "Biyografi yok"}</CardDescription>
               </div>
-              <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteUser.mutate(u.id)}>
+              <Button variant="ghost" size="icon" className="text-destructive shrink-0" onClick={() => deleteUser.mutate(u.id)}>
                 <Trash2 className="h-4 w-4" />
               </Button>
             </div>
@@ -73,12 +100,8 @@ function UsersManager() {
             <div className="space-y-1">
               <Label className="text-xs">Profil Fotoğrafı URL</Label>
               <div className="flex gap-2">
-                <Input 
-                  defaultValue={u.avatarUrl || ""} 
-                  id={`pp-${u.id}`}
-                  className="h-8 text-xs" 
-                />
-                <Button size="icon" className="h-8 w-8" onClick={() => {
+                <Input defaultValue={u.avatarUrl || ""} id={`pp-${u.id}`} className="h-8 text-xs" />
+                <Button size="icon" className="h-8 w-8 shrink-0" onClick={() => {
                   const url = (document.getElementById(`pp-${u.id}`) as HTMLInputElement).value;
                   updateUser.mutate({ id: u.id, avatarUrl: url });
                 }}>
@@ -87,33 +110,26 @@ function UsersManager() {
               </div>
             </div>
             <div className="flex gap-2">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="flex-1 text-xs"
-                onClick={() => {
-                  const newName = prompt("Yeni kullanıcı adı:", u.username);
-                  if (newName && newName !== u.username) updateUser.mutate({ id: u.id, username: newName });
-                }}
-              >
+              <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => {
+                const newName = prompt("Yeni kullanıcı adı:", u.username);
+                if (newName && newName !== u.username) updateUser.mutate({ id: u.id, username: newName });
+              }}>
                 İsim Değiştir
               </Button>
-              <Button 
-                variant="destructive" 
-                size="sm" 
-                className="flex-1 text-xs"
-                onClick={() => {
-                  if (confirm(`${u.username} adlı kullanıcıyı banlamak istediğinize emin misiniz?`)) {
-                    banUser.mutate(u.username);
-                  }
-                }}
-              >
+              <Button variant="destructive" size="sm" className="flex-1 text-xs" onClick={() => {
+                if (confirm(`${u.username} adlı kullanıcıyı banlamak istediğinize emin misiniz?`)) {
+                  banUser.mutate(u.username);
+                }
+              }}>
                 Banla
               </Button>
             </div>
           </CardContent>
         </Card>
       ))}
+      {(!users || users.length === 0) && (
+        <div className="col-span-full text-center py-12 text-muted-foreground">Kayıtlı üye bulunamadı.</div>
+      )}
     </div>
   );
 }
@@ -138,28 +154,17 @@ export default function Admin() {
       </div>
 
       <Tabs defaultValue="teams" className="space-y-6">
-        <TabsList className="bg-muted p-1 rounded-xl h-auto flex-wrap">
+        <TabsList className="bg-muted p-1 rounded-xl h-auto flex-wrap gap-1">
           <TabsTrigger value="teams" className="py-2.5 px-4">Takımlar</TabsTrigger>
-          <TabsTrigger value="players" className="py-2.5 px-4">Oyuncular & İstatistikler</TabsTrigger>
+          <TabsTrigger value="players" className="py-2.5 px-4">Oyuncular</TabsTrigger>
           <TabsTrigger value="fixtures" className="py-2.5 px-4">Fikstür & Maçlar</TabsTrigger>
           <TabsTrigger value="users" className="py-2.5 px-4">Üyeler</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="teams">
-          <TeamsManager />
-        </TabsContent>
-
-        <TabsContent value="players">
-          <PlayersManager />
-        </TabsContent>
-
-        <TabsContent value="fixtures">
-          <FixturesManager />
-        </TabsContent>
-
-        <TabsContent value="users">
-          <UsersManager />
-        </TabsContent>
+        <TabsContent value="teams"><TeamsManager /></TabsContent>
+        <TabsContent value="players"><PlayersManager /></TabsContent>
+        <TabsContent value="fixtures"><FixturesManager /></TabsContent>
+        <TabsContent value="users"><UsersManager /></TabsContent>
       </Tabs>
     </div>
   );
@@ -175,18 +180,11 @@ function TeamsManager() {
     e.preventDefault();
     if (editingTeam) {
       updateTeam.mutate({ id: editingTeam.id, name, logoUrl }, {
-        onSuccess: () => {
-          setEditingTeam(null);
-          setName("");
-          setLogoUrl("");
-        }
+        onSuccess: () => { setEditingTeam(null); setName(""); setLogoUrl(""); }
       });
     } else {
       createTeam.mutate({ name, logoUrl }, {
-        onSuccess: () => {
-          setName("");
-          setLogoUrl("");
-        }
+        onSuccess: () => { setName(""); setLogoUrl(""); }
       });
     }
   };
@@ -213,11 +211,9 @@ function TeamsManager() {
                 {editingTeam ? "Güncelle" : "Takım Ekle"}
               </Button>
               {editingTeam && (
-                <Button type="button" variant="outline" onClick={() => {
-                  setEditingTeam(null);
-                  setName("");
-                  setLogoUrl("");
-                }}>İptal</Button>
+                <Button type="button" variant="outline" onClick={() => { setEditingTeam(null); setName(""); setLogoUrl(""); }}>
+                  İptal
+                </Button>
               )}
             </div>
           </form>
@@ -225,22 +221,16 @@ function TeamsManager() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Mevcut Takımlar</CardTitle>
-        </CardHeader>
+        <CardHeader><CardTitle>Mevcut Takımlar</CardTitle></CardHeader>
         <CardContent className="space-y-4">
           {teams?.map(team => (
             <div key={team.id} className="flex items-center justify-between p-3 border rounded-lg">
               <div className="flex items-center gap-3">
-                {team.logoUrl && <img src={team.logoUrl} className="w-8 h-8 object-contain" />}
+                {team.logoUrl && <img src={team.logoUrl} className="w-8 h-8 object-contain" alt="" />}
                 <span className="font-semibold">{team.name}</span>
               </div>
               <div className="flex gap-1">
-                <Button variant="ghost" size="icon" onClick={() => {
-                  setEditingTeam(team);
-                  setName(team.name);
-                  setLogoUrl(team.logoUrl || "");
-                }}>
+                <Button variant="ghost" size="icon" onClick={() => { setEditingTeam(team); setName(team.name); setLogoUrl(team.logoUrl || ""); }}>
                   <Plus className="w-4 h-4 rotate-45" />
                 </Button>
                 <Button variant="destructive" size="icon" onClick={() => deleteTeam.mutate(team.id)}>
@@ -258,7 +248,6 @@ function TeamsManager() {
 function PlayersManager() {
   const { teams } = useTeams();
   const { players, createPlayer, deletePlayer, updatePlayer } = usePlayers();
-  
   const [newPlayerName, setNewPlayerName] = useState("");
   const [selectedTeamId, setSelectedTeamId] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -266,56 +255,53 @@ function PlayersManager() {
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedTeamId) return;
-    createPlayer.mutate({ 
-      name: newPlayerName, 
+    createPlayer.mutate({
+      name: newPlayerName,
       teamId: parseInt(selectedTeamId),
-      goals: 0, assists: 0, carabagCupGoals: 0, aurenLigCupGoals: 0, cleanSheets: 0, yellowCards: 0, redCards: 0 
-    }, {
-      onSuccess: () => setNewPlayerName("")
-    });
+      goals: 0, assists: 0,
+      carabagCupGoals: 0, aurenLigCupGoals: 0,
+      championsLeagueGoals: 0, europaLeagueGoals: 0,
+      superCupGoals: 0, top8Goals: 0, top12Goals: 0, top16Goals: 0,
+      cleanSheets: 0, yellowCards: 0, redCards: 0,
+    }, { onSuccess: () => setNewPlayerName("") });
   };
 
-  const filteredPlayers = players?.filter(player => 
+  const filteredPlayers = players?.filter(player =>
     player.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     teams?.find(t => t.id === player.teamId)?.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
+
+  const cupFields = Object.entries(TOURNAMENT_GOAL_FIELDS);
 
   return (
     <div className="space-y-6">
       <Card>
         <CardHeader><CardTitle>Oyuncu Ekle</CardTitle></CardHeader>
         <CardContent>
-          <form onSubmit={handleCreate} className="flex gap-4 items-end">
-            <div className="space-y-2 flex-1">
+          <form onSubmit={handleCreate} className="flex gap-4 items-end flex-wrap">
+            <div className="space-y-2 flex-1 min-w-[140px]">
               <Label>Takım Seç</Label>
               <Select value={selectedTeamId} onValueChange={setSelectedTeamId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Takım..." />
-                </SelectTrigger>
+                <SelectTrigger><SelectValue placeholder="Takım..." /></SelectTrigger>
                 <SelectContent>
                   {teams?.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2 flex-1">
+            <div className="space-y-2 flex-1 min-w-[140px]">
               <Label>Oyuncu Adı</Label>
               <Input value={newPlayerName} onChange={(e) => setNewPlayerName(e.target.value)} required />
             </div>
-            <Button type="submit" disabled={createPlayer.isPending}><Plus className="mr-2 h-4 w-4" /> Ekle</Button>
+            <Button type="submit" disabled={createPlayer.isPending}>
+              <Plus className="mr-2 h-4 w-4" /> Ekle
+            </Button>
           </form>
         </CardContent>
       </Card>
 
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-          <Input 
-            placeholder="Oyuncu veya takım ara..." 
-            className="pl-9"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-          />
-        </div>
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+        <Input placeholder="Oyuncu veya takım ara..." className="pl-9" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -324,72 +310,63 @@ function PlayersManager() {
             <CardHeader className="pb-2">
               <div className="flex justify-between items-start">
                 <div>
-                   <CardTitle className="text-lg">{player.name}</CardTitle>
-                   <CardDescription>{teams?.find(t => t.id === player.teamId)?.name}</CardDescription>
+                  <CardTitle className="text-lg">{player.name}</CardTitle>
+                  <CardDescription>{teams?.find(t => t.id === player.teamId)?.name}</CardDescription>
                 </div>
-                <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => deletePlayer.mutate(player.id)}>
+                <Button variant="ghost" size="icon" className="text-destructive h-8 w-8 shrink-0" onClick={() => deletePlayer.mutate(player.id)}>
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
+                {/* Takım */}
+                <div className="space-y-1 col-span-2">
                   <Label className="text-xs text-muted-foreground">Takım</Label>
-                  <Select 
-                    defaultValue={String(player.teamId)} 
+                  <Select
+                    defaultValue={String(player.teamId)}
                     onValueChange={(val) => updatePlayer.mutate({ id: player.id, teamId: parseInt(val) })}
                   >
-                    <SelectTrigger className="h-8">
-                      <SelectValue />
-                    </SelectTrigger>
+                    <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {teams?.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Gol</Label>
-                  <Input type="number" defaultValue={player.goals} 
-                    onBlur={(e) => updatePlayer.mutate({ id: player.id, goals: parseInt(e.target.value) })}
-                    className="h-8" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Carabağ Gol</Label>
-                  <Input type="number" defaultValue={player.carabagCupGoals} 
-                    onBlur={(e) => updatePlayer.mutate({ id: player.id, carabagCupGoals: parseInt(e.target.value) })}
-                    className="h-8" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Auren Gol</Label>
-                  <Input type="number" defaultValue={player.aurenLigCupGoals} 
-                    onBlur={(e) => updatePlayer.mutate({ id: player.id, aurenLigCupGoals: parseInt(e.target.value) })}
-                    className="h-8" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Asist</Label>
-                  <Input type="number" defaultValue={player.assists} 
-                    onBlur={(e) => updatePlayer.mutate({ id: player.id, assists: parseInt(e.target.value) })}
-                    className="h-8" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Gol Yememe</Label>
-                  <Input type="number" defaultValue={player.cleanSheets} 
-                    onBlur={(e) => updatePlayer.mutate({ id: player.id, cleanSheets: parseInt(e.target.value) })}
-                    className="h-8" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Sarı Kart</Label>
-                  <Input type="number" defaultValue={player.yellowCards} 
-                    onBlur={(e) => updatePlayer.mutate({ id: player.id, yellowCards: parseInt(e.target.value) })}
-                    className="h-8" />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Kırmızı Kart</Label>
-                  <Input type="number" defaultValue={player.redCards} 
-                    onBlur={(e) => updatePlayer.mutate({ id: player.id, redCards: parseInt(e.target.value) })}
-                    className="h-8" />
-                </div>
+
+                {/* Lig İstatistikleri */}
+                {[
+                  { key: "goals", label: "Lig Golü" },
+                  { key: "assists", label: "Asist" },
+                  { key: "cleanSheets", label: "Gol Yememe" },
+                  { key: "yellowCards", label: "Sarı Kart" },
+                  { key: "redCards", label: "Kırmızı Kart" },
+                ].map(f => (
+                  <div key={f.key} className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">{f.label}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      defaultValue={(player as any)[f.key]}
+                      onBlur={(e) => updatePlayer.mutate({ id: player.id, [f.key]: parseInt(e.target.value) || 0 })}
+                      className="h-8"
+                    />
+                  </div>
+                ))}
+
+                {/* Kupa Golleri */}
+                {cupFields.map(([, { key, label }]) => (
+                  <div key={key} className="space-y-1">
+                    <Label className="text-xs text-muted-foreground">{label}</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      defaultValue={(player as any)[key] || 0}
+                      onBlur={(e) => updatePlayer.mutate({ id: player.id, [key]: parseInt(e.target.value) || 0 })}
+                      className="h-8"
+                    />
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
@@ -402,28 +379,36 @@ function PlayersManager() {
 function FixturesManager() {
   const { teams } = useTeams();
   const { matches, createMatch, updateMatchScore, deleteMatch } = useMatches();
-  
+
   const [homeTeam, setHomeTeam] = useState("");
   const [awayTeam, setAwayTeam] = useState("");
   const [week, setWeek] = useState("1");
   const [date, setDate] = useState("");
   const [tournament, setTournament] = useState("league");
-  const [round, setRound] = useState("quarter_final");
+  const [round, setRound] = useState("group_stage");
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!homeTeam || !awayTeam) return;
     createMatch.mutate({
       homeTeamId: parseInt(homeTeam),
       awayTeamId: parseInt(awayTeam),
       week: tournament === "league" ? parseInt(week) : null,
       tournament,
       round: tournament !== "league" ? round : null,
-      date: date ? new Date(date) : undefined
+      date: date ? new Date(date) : undefined,
     }, {
-      onSuccess: () => {
-        setHomeTeam(""); setAwayTeam("");
-      }
+      onSuccess: () => { setHomeTeam(""); setAwayTeam(""); }
     });
+  };
+
+  const getMatchLabel = (match: any) => {
+    if (match.tournament === "league") {
+      return match.week != null ? `${match.week}. Hafta` : "Lig";
+    }
+    const tLabel = TOURNAMENT_LABELS[match.tournament] || match.tournament;
+    const rLabel = match.round ? (ROUND_LABELS[match.round] || match.round) : "";
+    return rLabel ? `${tLabel} — ${rLabel}` : tLabel;
   };
 
   return (
@@ -431,54 +416,68 @@ function FixturesManager() {
       <Card>
         <CardHeader><CardTitle>Maç Oluştur</CardTitle></CardHeader>
         <CardContent>
-          <form onSubmit={handleCreate} className="grid md:grid-cols-6 gap-4 items-end">
+          <form onSubmit={handleCreate} className="grid md:grid-cols-3 lg:grid-cols-6 gap-4 items-end">
+            {/* Turnuva */}
             <div className="space-y-2">
               <Label>Turnuva</Label>
               <Select value={tournament} onValueChange={setTournament}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="league">Lig</SelectItem>
-                  <SelectItem value="carabag_cup">Carabağ Cup</SelectItem>
-                  <SelectItem value="auren_lig_cup">Auren Lig Cup</SelectItem>
+                  {ALL_TOURNAMENTS.map(t => (
+                    <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-            {tournament !== "league" ? (
+
+            {/* Hafta veya Tur */}
+            {tournament === "league" ? (
+              <div className="space-y-2">
+                <Label>Hafta</Label>
+                <Input type="number" value={week} onChange={e => setWeek(e.target.value)} min={1} required />
+              </div>
+            ) : (
               <div className="space-y-2">
                 <Label>Tur</Label>
                 <Select value={round} onValueChange={setRound}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="quarter_final">Çeyrek Final</SelectItem>
-                    <SelectItem value="semi_final">Yarı Final</SelectItem>
-                    <SelectItem value="final">Final</SelectItem>
+                    {ALL_ROUNDS.map(r => (
+                      <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
-            ) : (
-              <div className="space-y-2">
-                <Label>Hafta</Label>
-                <Input type="number" value={week} onChange={e => setWeek(e.target.value)} min={1} required={tournament === "league"} />
-              </div>
             )}
+
+            {/* Ev Sahibi */}
             <div className="space-y-2">
               <Label>Ev Sahibi</Label>
               <Select value={homeTeam} onValueChange={setHomeTeam}>
                 <SelectTrigger><SelectValue placeholder="Seç..." /></SelectTrigger>
-                <SelectContent>{teams?.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  {teams?.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
+
+            {/* Deplasman */}
             <div className="space-y-2">
               <Label>Deplasman</Label>
               <Select value={awayTeam} onValueChange={setAwayTeam}>
                 <SelectTrigger><SelectValue placeholder="Seç..." /></SelectTrigger>
-                <SelectContent>{teams?.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}</SelectContent>
+                <SelectContent>
+                  {teams?.map(t => <SelectItem key={t.id} value={String(t.id)}>{t.name}</SelectItem>)}
+                </SelectContent>
               </Select>
             </div>
-             <div className="space-y-2">
+
+            {/* Tarih */}
+            <div className="space-y-2">
               <Label>Tarih</Label>
               <Input type="datetime-local" value={date} onChange={e => setDate(e.target.value)} />
             </div>
+
             <Button type="submit" disabled={createMatch.isPending}>Oluştur</Button>
           </form>
         </CardContent>
@@ -486,62 +485,45 @@ function FixturesManager() {
 
       <div className="space-y-4">
         <h3 className="font-bold text-lg">Maçları Düzenle / Skor Gir</h3>
+        {matches?.length === 0 && (
+          <div className="text-center py-8 text-muted-foreground">Henüz maç yok.</div>
+        )}
         {matches?.map(match => (
           <Card key={match.id} className="p-4">
-             <div className="flex flex-col md:flex-row items-center gap-4">
-               <div className="text-sm font-bold w-24 text-center bg-muted py-1 rounded">
-                 {match.tournament === 'league' ? `Week ${match.week}` : 
-                  match.round === 'quarter_final' ? 'Çeyrek F.' : 
-                  match.round === 'semi_final' ? 'Yarı F.' : 'Final'}
-               </div>
-               <div className="flex-1 flex items-center justify-between gap-4">
-                  <span className="font-semibold text-right flex-1">{teams?.find(t => t.id === match.homeTeamId)?.name}</span>
-                  
-                  <div className="flex items-center gap-2">
-                     <Input 
-                       type="number" 
-                       className="w-16 text-center" 
-                       defaultValue={match.homeScore ?? undefined}
-                       id={`home-${match.id}`}
-                     />
-                     <span>-</span>
-                     <Input 
-                       type="number" 
-                       className="w-16 text-center" 
-                       defaultValue={match.awayScore ?? undefined}
-                       id={`away-${match.id}`}
-                     />
-                  </div>
-
-                  <span className="font-semibold text-left flex-1">{teams?.find(t => t.id === match.awayTeamId)?.name}</span>
-               </div>
-               
-               <div className="flex items-center gap-2 w-full md:w-auto mt-4 md:mt-0">
-                  <Input 
-                    placeholder="Video URL" 
-                    className="md:w-40" 
-                    defaultValue={match.videoUrl ?? ""}
-                    id={`video-${match.id}`}
-                  />
-                  <Button size="sm" onClick={() => {
-                    const h = (document.getElementById(`home-${match.id}`) as HTMLInputElement).value;
-                    const a = (document.getElementById(`away-${match.id}`) as HTMLInputElement).value;
-                    const v = (document.getElementById(`video-${match.id}`) as HTMLInputElement).value;
-                    if(h === "" || a === "") return;
-                    updateMatchScore.mutate({
-                      id: match.id,
-                      homeScore: parseInt(h),
-                      awayScore: parseInt(a),
-                      videoUrl: v || undefined
-                    });
-                  }}>
-                    <Save className="w-4 h-4" />
-                  </Button>
-                  <Button variant="destructive" size="sm" onClick={() => deleteMatch.mutate(match.id)}>
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-               </div>
-             </div>
+            <div className="flex flex-col md:flex-row items-center gap-4">
+              <div className="text-xs font-bold w-40 text-center bg-muted py-1.5 rounded px-2 shrink-0 truncate">
+                {getMatchLabel(match)}
+              </div>
+              <div className="flex-1 flex items-center justify-between gap-4 min-w-0">
+                <span className="font-semibold text-right flex-1 truncate">{teams?.find(t => t.id === match.homeTeamId)?.name}</span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Input type="number" className="w-16 text-center" defaultValue={match.homeScore ?? undefined} id={`home-${match.id}`} />
+                  <span>-</span>
+                  <Input type="number" className="w-16 text-center" defaultValue={match.awayScore ?? undefined} id={`away-${match.id}`} />
+                </div>
+                <span className="font-semibold text-left flex-1 truncate">{teams?.find(t => t.id === match.awayTeamId)?.name}</span>
+              </div>
+              <div className="flex items-center gap-2 w-full md:w-auto mt-2 md:mt-0 shrink-0">
+                <Input
+                  placeholder="Video URL"
+                  className="md:w-40"
+                  defaultValue={match.videoUrl ?? ""}
+                  id={`video-${match.id}`}
+                />
+                <Button size="sm" onClick={() => {
+                  const h = (document.getElementById(`home-${match.id}`) as HTMLInputElement).value;
+                  const a = (document.getElementById(`away-${match.id}`) as HTMLInputElement).value;
+                  const v = (document.getElementById(`video-${match.id}`) as HTMLInputElement).value;
+                  if (h === "" || a === "") return;
+                  updateMatchScore.mutate({ id: match.id, homeScore: parseInt(h), awayScore: parseInt(a), videoUrl: v || undefined });
+                }}>
+                  <Save className="w-4 h-4" />
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => deleteMatch.mutate(match.id)}>
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
           </Card>
         ))}
       </div>

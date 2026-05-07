@@ -337,8 +337,9 @@ export async function registerRoutes(
       });
     }
 
-    // Process all played matches
+    // Process only LEAGUE matches (cups don't count toward league table)
     for (const match of matches) {
+      if (match.tournament !== "league") continue;
       if (!match.isPlayed || match.homeScore === null || match.awayScore === null) continue;
 
       const homeStats = statsMap.get(match.homeTeamId);
