@@ -37,13 +37,13 @@ const ALL_ROUNDS = [
   { value: "final",         label: "Final" },
 ];
 
-// Map tournament → player goals field key
-const TOURNAMENT_GOAL_FIELDS: Record<string, { key: string; label: string }> = {
-  carabag_cup:      { key: "carabagCupGoals",      label: "Carabağ Cup Gol" },
-  auren_lig_cup:    { key: "aurenLigCupGoals",     label: "Auren Lig Cup Gol" },
-  champions_league: { key: "championsLeagueGoals", label: "Champions League Gol" },
-  europa_league:    { key: "europaLeagueGoals",    label: "UEFA Avrupa Ligi Gol" },
-  super_cup:        { key: "superCupGoals",        label: "Süper Kupa Gol" },
+// Map tournament → player goals+assists field keys
+const TOURNAMENT_STAT_FIELDS: Record<string, { goalsKey: string; assistsKey: string; label: string }> = {
+  carabag_cup:      { goalsKey: "carabagCupGoals",      assistsKey: "carabagCupAssists",      label: "Carabağ Cup" },
+  auren_lig_cup:    { goalsKey: "aurenLigCupGoals",     assistsKey: "aurenLigCupAssists",     label: "Auren Lig Cup" },
+  champions_league: { goalsKey: "championsLeagueGoals", assistsKey: "championsLeagueAssists", label: "Champions League" },
+  europa_league:    { goalsKey: "europaLeagueGoals",    assistsKey: "europaLeagueAssists",    label: "UEFA Avrupa Ligi" },
+  super_cup:        { goalsKey: "superCupGoals",        assistsKey: "superCupAssists",        label: "Süper Kupa" },
 };
 
 function UsersManager() {
@@ -253,9 +253,12 @@ function PlayersManager() {
       name: newPlayerName,
       teamId: parseInt(selectedTeamId),
       goals: 0, assists: 0,
-      carabagCupGoals: 0, aurenLigCupGoals: 0,
-      championsLeagueGoals: 0, europaLeagueGoals: 0,
-      superCupGoals: 0, top8Goals: 0, top12Goals: 0, top16Goals: 0,
+      carabagCupGoals: 0, carabagCupAssists: 0,
+      aurenLigCupGoals: 0, aurenLigCupAssists: 0,
+      championsLeagueGoals: 0, championsLeagueAssists: 0,
+      europaLeagueGoals: 0, europaLeagueAssists: 0,
+      superCupGoals: 0, superCupAssists: 0,
+      top8Goals: 0, top12Goals: 0, top16Goals: 0,
       cleanSheets: 0, yellowCards: 0, redCards: 0,
     }, { onSuccess: () => setNewPlayerName("") });
   };
@@ -265,7 +268,7 @@ function PlayersManager() {
     teams?.find(t => t.id === player.teamId)?.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const cupFields = Object.entries(TOURNAMENT_GOAL_FIELDS);
+  const cupStatEntries = Object.entries(TOURNAMENT_STAT_FIELDS);
 
   return (
     <div className="space-y-6">
@@ -348,17 +351,32 @@ function PlayersManager() {
                   </div>
                 ))}
 
-                {/* Kupa Golleri */}
-                {cupFields.map(([, { key, label }]) => (
-                  <div key={key} className="space-y-1">
-                    <Label className="text-xs text-muted-foreground">{label}</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      defaultValue={(player as any)[key] || 0}
-                      onBlur={(e) => updatePlayer.mutate({ id: player.id, [key]: parseInt(e.target.value) || 0 })}
-                      className="h-8"
-                    />
+                {/* Kupa İstatistikleri (Gol + Asist) */}
+                {cupStatEntries.map(([, { goalsKey, assistsKey, label }]) => (
+                  <div key={goalsKey} className="space-y-1 col-span-2">
+                    <Label className="text-xs font-semibold text-primary/80 uppercase tracking-wide">{label}</Label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Gol</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          defaultValue={(player as any)[goalsKey] || 0}
+                          onBlur={(e) => updatePlayer.mutate({ id: player.id, [goalsKey]: parseInt(e.target.value) || 0 })}
+                          className="h-8"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label className="text-[10px] text-muted-foreground">Asist</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          defaultValue={(player as any)[assistsKey] || 0}
+                          onBlur={(e) => updatePlayer.mutate({ id: player.id, [assistsKey]: parseInt(e.target.value) || 0 })}
+                          className="h-8"
+                        />
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
