@@ -402,6 +402,55 @@ export async function registerRoutes(
 
   // ===== AUREN AI ROUTES (Admin only) =====
 
+  // AI Tool definitions — gives AI full control over the site
+  const AI_TOOLS: any[] = [
+    { type: "function", function: { name: "get_teams", description: "Tüm takımları puan durumu ve istatistikleriyle listeler", parameters: { type: "object", properties: {} } } },
+    { type: "function", function: { name: "create_team", description: "Yeni takım oluşturur", parameters: { type: "object", properties: { name: { type: "string" }, logoUrl: { type: "string" } }, required: ["name"] } } },
+    { type: "function", function: { name: "update_team", description: "Takım adını veya logosunu günceller", parameters: { type: "object", properties: { id: { type: "number" }, name: { type: "string" }, logoUrl: { type: "string" } }, required: ["id"] } } },
+    { type: "function", function: { name: "delete_team", description: "Takımı ve tüm verilerini siler", parameters: { type: "object", properties: { id: { type: "number" } }, required: ["id"] } } },
+    { type: "function", function: { name: "get_players", description: "Tüm oyuncuları istatistikleriyle listeler", parameters: { type: "object", properties: {} } } },
+    { type: "function", function: { name: "create_player", description: "Yeni oyuncu ekler", parameters: { type: "object", properties: { name: { type: "string" }, teamId: { type: "number" }, goals: { type: "number" }, assists: { type: "number" } }, required: ["name", "teamId"] } } },
+    { type: "function", function: { name: "update_player", description: "Oyuncu adı, takımı veya istatistiklerini günceller (gol, asist, sarı kart, kırmızı kart, kupa istatistikleri, kalesini gole kapatma vb.)", parameters: { type: "object", properties: { id: { type: "number" }, name: { type: "string" }, teamId: { type: "number" }, goals: { type: "number" }, assists: { type: "number" }, carabagCupGoals: { type: "number" }, carabagCupAssists: { type: "number" }, aurenLigCupGoals: { type: "number" }, aurenLigCupAssists: { type: "number" }, championsLeagueGoals: { type: "number" }, championsLeagueAssists: { type: "number" }, europaLeagueGoals: { type: "number" }, europaLeagueAssists: { type: "number" }, superCupGoals: { type: "number" }, superCupAssists: { type: "number" }, cleanSheets: { type: "number" }, yellowCards: { type: "number" }, redCards: { type: "number" } }, required: ["id"] } } },
+    { type: "function", function: { name: "delete_player", description: "Oyuncuyu siler", parameters: { type: "object", properties: { id: { type: "number" } }, required: ["id"] } } },
+    { type: "function", function: { name: "get_matches", description: "Tüm maçları (lig + kupalar) listeler", parameters: { type: "object", properties: {} } } },
+    { type: "function", function: { name: "create_match", description: "Yeni maç oluşturur", parameters: { type: "object", properties: { homeTeamId: { type: "number" }, awayTeamId: { type: "number" }, tournament: { type: "string", enum: ["league","carabag_cup","auren_lig_cup","champions_league","europa_league","super_cup"] }, round: { type: "string", enum: ["group_stage","round_of_16","round_of_12","round_of_8","quarter_final","semi_final","final"] }, week: { type: "number" } }, required: ["homeTeamId","awayTeamId","tournament"] } } },
+    { type: "function", function: { name: "update_match_score", description: "Maç skorunu günceller; lig maçlarında puan tablosunu otomatik hesaplar", parameters: { type: "object", properties: { id: { type: "number" }, homeScore: { type: "number" }, awayScore: { type: "number" }, videoUrl: { type: "string" } }, required: ["id","homeScore","awayScore"] } } },
+    { type: "function", function: { name: "delete_match", description: "Maçı siler ve lig tablosunu günceller", parameters: { type: "object", properties: { id: { type: "number" } }, required: ["id"] } } },
+    { type: "function", function: { name: "get_chat_messages", description: "Sohbet odası mesajlarını listeler", parameters: { type: "object", properties: {} } } },
+    { type: "function", function: { name: "delete_chat_message", description: "Sohbet mesajını siler", parameters: { type: "object", properties: { id: { type: "number" } }, required: ["id"] } } },
+    { type: "function", function: { name: "ban_user", description: "Kullanıcıyı sohbetten banlar", parameters: { type: "object", properties: { identifier: { type: "string" } }, required: ["identifier"] } } },
+  ];
+
+  // Execute an AI tool call against real DB/storage
+  async function executeAITool(name: string, args: any): Promise<any> {
+    switch (name) {
+      case "get_teams": return await storage.getTeams();
+      case "create_team": return await storage.createTeam(args);
+      case "update_team": { const { id, ...rest } = args; return await storage.updateTeam(id, rest); }
+      case "delete_team": await storage.deleteTeam(args.id); return { ok: true };
+      case "get_players": return await storage.getPlayers();
+      case "create_player": return await storage.createPlayer(args);
+      case "update_player": { const { id, ...rest } = args; return await storage.updatePlayer(id, rest); }
+      case "delete_player": await storage.deletePlayer(args.id); return { ok: true };
+      case "get_matches": return await storage.getMatches();
+      case "create_match": return await storage.createMatch(args);
+      case "update_match_score": {
+        const match = await storage.updateMatch(args.id, { homeScore: args.homeScore, awayScore: args.awayScore, videoUrl: args.videoUrl, isPlayed: true });
+        await recalculateLeagueTable();
+        return match;
+      }
+      case "delete_match": {
+        await storage.deleteMatch(args.id);
+        await recalculateLeagueTable();
+        return { ok: true };
+      }
+      case "get_chat_messages": return await storage.getMessages();
+      case "delete_chat_message": await storage.deleteMessage(args.id); return { ok: true };
+      case "ban_user": return await storage.banUser(args.identifier, "AI tarafından yasaklandı");
+      default: return { error: "Bilinmeyen araç" };
+    }
+  }
+
   // Get all AI conversations
   app.get("/api/ai/conversations", async (req, res) => {
     if (!req.session.isAdmin) return res.status(403).json({ message: "Yetkisiz erişim." });
@@ -434,59 +483,100 @@ export async function registerRoutes(
     res.json(msgs);
   });
 
-  // Send a message (streaming)
+  // Send a message — tool-calling loop then streaming final response
   app.post("/api/ai/conversations/:id/messages", async (req, res) => {
     if (!req.session.isAdmin) return res.status(403).json({ message: "Yetkisiz erişim." });
     const conversationId = parseInt(req.params.id);
     const { content } = req.body;
     if (!content?.trim()) return res.status(400).json({ message: "Mesaj boş olamaz." });
 
-    // Save user message
     await db.insert(aiMessages).values({ conversationId, role: "user", content });
 
-    // Get conversation history
     const history = await db.select().from(aiMessages).where(eq(aiMessages.conversationId, conversationId)).orderBy(aiMessages.createdAt);
-    const chatMessages = history.map(m => ({ role: m.role as "user" | "assistant", content: m.content }));
 
-    // Update conversation updatedAt & title if first message
     if (history.length === 1) {
-      const shortTitle = content.length > 40 ? content.slice(0, 40) + "…" : content;
+      const shortTitle = content.length > 50 ? content.slice(0, 50) + "…" : content;
       await db.update(aiConversations).set({ title: shortTitle, updatedAt: new Date() }).where(eq(aiConversations.id, conversationId));
     } else {
       await db.update(aiConversations).set({ updatedAt: new Date() }).where(eq(aiConversations.id, conversationId));
     }
 
-    // SSE headers
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
 
-    let fullResponse = "";
+    const send = (obj: object) => res.write(`data: ${JSON.stringify(obj)}\n\n`);
+
     try {
-      const stream = await openai.chat.completions.create({
-        model: "gpt-5.4",
-        messages: [{ role: "system", content: AUREN_AI_SYSTEM_PROMPT }, ...chatMessages],
-        stream: true,
-        max_completion_tokens: 4096,
-      });
+      // Build message history for OpenAI
+      const msgs: any[] = [
+        { role: "system", content: AUREN_AI_SYSTEM_PROMPT },
+        ...history.map(m => ({ role: m.role, content: m.content })),
+      ];
 
-      for await (const chunk of stream) {
-        const delta = chunk.choices[0]?.delta?.content || "";
-        if (delta) {
-          fullResponse += delta;
-          res.write(`data: ${JSON.stringify({ content: delta })}\n\n`);
+      // Tool-calling agentic loop (max 8 rounds)
+      let rounds = 0;
+      while (rounds < 8) {
+        rounds++;
+        const response = await openai.chat.completions.create({
+          model: "gpt-5.4",
+          messages: msgs,
+          tools: AI_TOOLS,
+          tool_choice: "auto",
+          max_completion_tokens: 4096,
+        });
+
+        const choice = response.choices[0];
+        const assistantMsg = choice.message;
+        msgs.push(assistantMsg);
+
+        if (choice.finish_reason === "tool_calls" && assistantMsg.tool_calls?.length) {
+          for (const tc of assistantMsg.tool_calls) {
+            const toolName = tc.function.name;
+            const toolArgs = JSON.parse(tc.function.arguments || "{}");
+
+            send({ type: "tool_call", tool: toolName, args: toolArgs });
+
+            let result: any;
+            try {
+              result = await executeAITool(toolName, toolArgs);
+              send({ type: "tool_result", tool: toolName, ok: true });
+            } catch (e: any) {
+              result = { error: e.message };
+              send({ type: "tool_result", tool: toolName, ok: false, error: e.message });
+            }
+
+            msgs.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: JSON.stringify(result),
+            });
+          }
+          continue;
         }
-      }
-    } catch (err) {
-      res.write(`data: ${JSON.stringify({ error: "AI hatası oluştu." })}\n\n`);
-      res.end();
-      return;
-    }
 
-    // Save assistant message
-    await db.insert(aiMessages).values({ conversationId, role: "assistant", content: fullResponse });
-    res.write(`data: ${JSON.stringify({ done: true })}\n\n`);
-    res.end();
+        // Final text response — stream it
+        const finalText = assistantMsg.content || "";
+        if (finalText) {
+          // Simulate streaming by chunking
+          const words = finalText.split(/(?<=\s)/);
+          let accumulated = "";
+          for (const word of words) {
+            accumulated += word;
+            send({ type: "content", content: word });
+            await new Promise(r => setTimeout(r, 8));
+          }
+          await db.insert(aiMessages).values({ conversationId, role: "assistant", content: finalText });
+        }
+        break;
+      }
+
+      send({ type: "done" });
+      res.end();
+    } catch (err: any) {
+      send({ type: "error", error: err.message || "AI hatası oluştu." });
+      res.end();
+    }
   });
 
   // Seed data function (removed seed content to avoid fake stats)
