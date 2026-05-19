@@ -42,41 +42,42 @@ export default function Home() {
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,rgba(255,255,255,0.07),transparent_60%)]" />
         <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-white/20 to-transparent" />
 
-        <div className="relative p-8 md:p-12 flex flex-col md:flex-row items-center justify-between gap-8">
-          <div className="space-y-5 text-center md:text-left">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-sm font-semibold border border-white/10">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+        <div className="relative p-5 sm:p-8 md:p-12 flex flex-col sm:flex-row items-center justify-between gap-5 sm:gap-8">
+          <div className="space-y-4 text-center sm:text-left w-full sm:w-auto">
+            <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 rounded-full bg-white/15 backdrop-blur-md text-xs sm:text-sm font-semibold border border-white/10">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shrink-0" />
               Sezon 2025/26 · Aktif
             </div>
             <div>
-              <p className="text-white/60 text-sm font-medium uppercase tracking-widest mb-1">Güncel Hafta</p>
-              <h1 className="text-6xl md:text-8xl font-black font-display tracking-tighter text-white leading-none">
-                {currentWeek}<span className="text-white/30 text-4xl md:text-5xl">.HFT</span>
+              <p className="text-white/60 text-xs sm:text-sm font-medium uppercase tracking-widest mb-1">Güncel Hafta</p>
+              <h1 className="text-5xl sm:text-6xl md:text-8xl font-black font-display tracking-tighter text-white leading-none">
+                {currentWeek}<span className="text-white/55 text-3xl sm:text-4xl md:text-5xl">.HFT</span>
               </h1>
             </div>
-            <p className="text-white/60 max-w-sm text-sm leading-relaxed">
+            <p className="text-white/60 max-w-sm text-xs sm:text-sm leading-relaxed mx-auto sm:mx-0">
               Auren League heyecanı devam ediyor. Liderlik mücadelesi kızışırken haftanın maçlarını kaçırma.
             </p>
           </div>
 
           {leader ? (
-            <div className="flex flex-col items-center gap-3 bg-white/10 backdrop-blur-md p-7 rounded-2xl border border-white/10 min-w-[180px] shine">
-              <div className="text-xs font-black tracking-widest text-white/50 uppercase">Lider</div>
+            <div className="flex flex-row sm:flex-col items-center gap-3 sm:gap-3 bg-white/10 backdrop-blur-md px-5 py-4 sm:p-7 rounded-2xl border border-white/10 w-full sm:w-auto sm:min-w-[160px] shine">
+              <div className="hidden sm:block text-xs font-black tracking-widest text-white/50 uppercase">Lider</div>
               {leader.logoUrl ? (
-                <img src={leader.logoUrl} alt={leader.name} className="w-20 h-20 object-contain drop-shadow-2xl" />
+                <img src={leader.logoUrl} alt={leader.name} className="w-14 h-14 sm:w-20 sm:h-20 object-contain drop-shadow-2xl shrink-0" />
               ) : (
-                <div className="w-20 h-20 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10">
-                  <Trophy className="w-10 h-10 text-yellow-400" />
+                <div className="w-14 h-14 sm:w-20 sm:h-20 bg-white/10 rounded-2xl flex items-center justify-center border border-white/10 shrink-0">
+                  <Trophy className="w-7 h-7 sm:w-10 sm:h-10 text-yellow-400" />
                 </div>
               )}
-              <div className="text-center">
-                <h2 className="text-xl font-black text-white">{leader.name}</h2>
-                <div className="text-4xl font-black text-yellow-400 tabular-nums mt-1">{leader.points}</div>
+              <div className="text-center sm:text-center flex-1 sm:flex-none">
+                <div className="text-[10px] sm:hidden font-black tracking-widest text-white/40 uppercase mb-0.5">Lider</div>
+                <h2 className="text-base sm:text-xl font-black text-white">{leader.name}</h2>
+                <div className="text-2xl sm:text-4xl font-black text-yellow-400 tabular-nums mt-0.5 sm:mt-1">{leader.points}</div>
                 <div className="text-xs text-white/40 font-medium mt-0.5">Puan</div>
               </div>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-3 bg-white/10 backdrop-blur-md p-7 rounded-2xl border border-white/10 min-w-[180px]">
+            <div className="flex flex-col items-center gap-3 bg-white/10 backdrop-blur-md p-7 rounded-2xl border border-white/10 w-full sm:min-w-[160px]">
               <Trophy className="w-12 h-12 text-yellow-400/50" />
               <p className="text-white/40 text-sm text-center">Henüz takım yok</p>
             </div>

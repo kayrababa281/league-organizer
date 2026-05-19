@@ -33,20 +33,20 @@ export default function Fixtures() {
         </div>
       </div>
 
-      <div className="space-y-10">
+      <div className="space-y-8">
         {sortedWeeks.length > 0 ? (
           sortedWeeks.map((week) => (
-            <div key={week} className="space-y-4">
+            <div key={week} className="space-y-3">
               {/* Week header */}
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-2 bg-primary text-primary-foreground px-5 py-1.5 rounded-full shadow-lg glow-primary-sm">
-                  <span className="text-xs font-black tracking-widest uppercase opacity-70">Hafta</span>
-                  <span className="text-lg font-black">{week}</span>
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 bg-primary text-primary-foreground px-4 py-1.5 rounded-full shadow-lg glow-primary-sm">
+                  <span className="text-[10px] font-black tracking-widest uppercase opacity-70">HAFTA</span>
+                  <span className="text-base font-black">{week}</span>
                 </div>
                 <div className="h-px flex-1 bg-gradient-to-r from-primary/30 to-transparent" />
               </div>
 
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {groupedMatches[Number(week)].map((match) => {
                   const home = teams?.find(t => t.id === match.homeTeamId);
                   const away = teams?.find(t => t.id === match.awayTeamId);
@@ -63,20 +63,17 @@ export default function Fixtures() {
                           : "border-border/40 bg-card hover:border-border/70"}
                       `}
                     >
-                      {/* Top accent line */}
                       {played && <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent" />}
 
                       {/* Header row */}
-                      <div className="flex items-center justify-between px-4 py-2.5 border-b border-border/30 bg-muted/20">
-                        <div className="flex items-center gap-2">
-                          {played ? (
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                          ) : (
-                            <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                          )}
-                          <span className="text-xs font-semibold text-muted-foreground">
+                      <div className="flex items-center justify-between px-3 sm:px-4 py-2 border-b border-border/30 bg-muted/20">
+                        <div className="flex items-center gap-1.5">
+                          {played
+                            ? <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                            : <Clock className="w-3 h-3 text-muted-foreground shrink-0" />}
+                          <span className="text-[11px] font-semibold text-muted-foreground truncate">
                             {match.date
-                              ? format(new Date(match.date), 'd MMMM yyyy · HH:mm', { locale: tr })
+                              ? format(new Date(match.date), 'd MMM yyyy · HH:mm', { locale: tr })
                               : played ? "Oynandı" : "Tarih Belirlenmedi"}
                           </span>
                         </div>
@@ -85,7 +82,7 @@ export default function Fixtures() {
                             href={match.videoUrl}
                             target="_blank"
                             rel="noreferrer"
-                            className="flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition-colors bg-primary/10 px-2.5 py-1 rounded-full"
+                            className="flex items-center gap-1 text-[11px] font-bold text-primary hover:text-primary/80 transition-colors bg-primary/10 px-2 py-0.5 rounded-full shrink-0 ml-2"
                           >
                             <Video className="w-3 h-3" /> İzle
                           </a>
@@ -93,42 +90,42 @@ export default function Fixtures() {
                       </div>
 
                       {/* Match content */}
-                      <div className="p-5 flex items-center justify-between gap-4">
+                      <div className="px-3 sm:px-5 py-4 flex items-center gap-2 sm:gap-4">
                         {/* Home team */}
-                        <div className="flex-1 flex flex-col items-center gap-2 text-center">
+                        <div className="flex-1 flex flex-col items-center gap-1.5 sm:gap-2 text-center min-w-0">
                           {home?.logoUrl ? (
-                            <img src={home.logoUrl} className="w-12 h-12 object-contain drop-shadow-md" alt={home.name} />
+                            <img src={home.logoUrl} className="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow-md" alt={home.name} />
                           ) : (
-                            <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-black text-primary">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xs sm:text-sm font-black text-primary shrink-0">
                               {home?.name?.substring(0, 2).toUpperCase()}
                             </div>
                           )}
-                          <span className="font-bold text-sm leading-tight">{home?.name}</span>
+                          <span className="font-bold text-xs sm:text-sm leading-tight truncate w-full px-1">{home?.name}</span>
                         </div>
 
                         {/* Score / VS */}
-                        <div className="flex flex-col items-center gap-1 shrink-0">
+                        <div className="shrink-0">
                           {played ? (
-                            <div className="bg-primary text-primary-foreground font-black text-3xl px-6 py-3 rounded-2xl glow-primary-sm tabular-nums tracking-tight shadow-lg">
-                              {match.homeScore} <span className="text-primary-foreground/50 text-2xl">·</span> {match.awayScore}
+                            <div className="bg-primary text-primary-foreground font-black text-xl sm:text-2xl px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl glow-primary-sm tabular-nums tracking-tight shadow-lg">
+                              {match.homeScore} <span className="text-primary-foreground/50 text-lg sm:text-xl">·</span> {match.awayScore}
                             </div>
                           ) : (
-                            <div className="bg-muted border border-border/50 font-black text-xl px-6 py-3 rounded-2xl text-muted-foreground tracking-widest">
+                            <div className="bg-muted border border-border/50 font-black text-base sm:text-xl px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl sm:rounded-2xl text-muted-foreground tracking-widest">
                               VS
                             </div>
                           )}
                         </div>
 
                         {/* Away team */}
-                        <div className="flex-1 flex flex-col items-center gap-2 text-center">
+                        <div className="flex-1 flex flex-col items-center gap-1.5 sm:gap-2 text-center min-w-0">
                           {away?.logoUrl ? (
-                            <img src={away.logoUrl} className="w-12 h-12 object-contain drop-shadow-md" alt={away.name} />
+                            <img src={away.logoUrl} className="w-10 h-10 sm:w-12 sm:h-12 object-contain drop-shadow-md" alt={away.name} />
                           ) : (
-                            <div className="w-12 h-12 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-sm font-black text-primary">
+                            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl sm:rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-xs sm:text-sm font-black text-primary shrink-0">
                               {away?.name?.substring(0, 2).toUpperCase()}
                             </div>
                           )}
-                          <span className="font-bold text-sm leading-tight">{away?.name}</span>
+                          <span className="font-bold text-xs sm:text-sm leading-tight truncate w-full px-1">{away?.name}</span>
                         </div>
                       </div>
                     </div>
