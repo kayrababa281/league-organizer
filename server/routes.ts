@@ -36,6 +36,14 @@ Görevlerin:
 - Kodlama, tasarım, strateji ne isterlerse yap
 - Cevaplarında Markdown formatını kullan (başlıklar, listeler, **kalın**)
 
+Logo bulma talimatları:
+- "Logo bul", "logoları güncelle", "oto logo" gibi isteklerde şu adımları takip et:
+  1. Önce get_teams ile tüm takımları al
+  2. Her takım için find_team_logo aracını çağır (takım adıyla)
+  3. Bulunan logoUrl'yi update_team ile kaydet
+  4. Bulunamazsa takımı atla, sonuçları özetle
+- find_team_logo birden fazla takım için paralel çağrılabilir (her biri ayrı tool_call)
+
 Sen sadece admin için çalışıyorsun. Ultra gelişmiş, efsane bir AI asistansın.`;;
 
 const storage_multer = multer.diskStorage({
@@ -419,6 +427,20 @@ export async function registerRoutes(
     { type: "function", function: { name: "get_chat_messages", description: "Sohbet odası mesajlarını listeler", parameters: { type: "object", properties: {} } } },
     { type: "function", function: { name: "delete_chat_message", description: "Sohbet mesajını siler", parameters: { type: "object", properties: { id: { type: "number" } }, required: ["id"] } } },
     { type: "function", function: { name: "ban_user", description: "Kullanıcıyı sohbetten banlar", parameters: { type: "object", properties: { identifier: { type: "string" } }, required: ["identifier"] } } },
+    {
+      type: "function",
+      function: {
+        name: "find_team_logo",
+        description: "Takım adını internette arar (TheSportsDB + Wikipedia) ve PNG logo URL'si döner. Bulunamazsa null döner. update_team ile logoUrl'yi kaydet.",
+        parameters: {
+          type: "object",
+          properties: {
+            teamName: { type: "string", description: "Aranacak takım adı (İngilizce veya Türkçe)" },
+          },
+          required: ["teamName"],
+        },
+      },
+    },
   ];
 
   // Execute an AI tool call against real DB/storage
@@ -447,6 +469,49 @@ export async function registerRoutes(
       case "get_chat_messages": return await storage.getMessages();
       case "delete_chat_message": await storage.deleteMessage(args.id); return { ok: true };
       case "ban_user": return await storage.banUser(args.identifier, "AI tarafından yasaklandı");
+
+      case "find_team_logo": {
+        const name = (args.teamName || "").trim();
+        if (!name) return { logoUrl: null, found: false, reason: "Takım adı boş" };
+
+        // 1) TheSportsDB – ücretsiz, API key gerektirmez
+        try {
+          const encoded = encodeURIComponent(name);
+          const sdbRes = await fetch(`https://www.thesportsdb.com/api/v1/json/3/searchteams.php?t=${encoded}`);
+          if (sdbRes.ok) {
+            const sdbData = await sdbRes.json() as any;
+            const team = sdbData?.teams?.[0];
+            if (team?.strTeamBadge) {
+              return { logoUrl: team.strTeamBadge + "/preview", found: true, source: "TheSportsDB", teamFound: team.strTeam };
+            }
+          }
+        } catch (_) { /* devam et */ }
+
+        // 2) Wikipedia API – article image (logo için iyi sonuç verir)
+        try {
+          const encoded = encodeURIComponent(name + " F.C.");
+          const wikiRes = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encoded}`);
+          if (wikiRes.ok) {
+            const wiki = await wikiRes.json() as any;
+            const img = wiki?.thumbnail?.source || wiki?.originalimage?.source;
+            if (img) return { logoUrl: img, found: true, source: "Wikipedia" };
+          }
+        } catch (_) { /* devam et */ }
+
+        // 3) Sadece takım adıyla Wikipedia dene
+        try {
+          const encoded = encodeURIComponent(name);
+          const wikiRes2 = await fetch(`https://en.wikipedia.org/api/rest_v1/page/summary/${encoded}`);
+          if (wikiRes2.ok) {
+            const wiki2 = await wikiRes2.json() as any;
+            const img = wiki2?.thumbnail?.source || wiki2?.originalimage?.source;
+            if (img) return { logoUrl: img, found: true, source: "Wikipedia (direct)" };
+          }
+        } catch (_) { /* devam et */ }
+
+        return { logoUrl: null, found: false, reason: "Logo bulunamadı" };
+      }
+
       default: return { error: "Bilinmeyen araç" };
     }
   }

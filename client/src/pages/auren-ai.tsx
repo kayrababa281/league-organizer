@@ -54,6 +54,7 @@ const TOOL_LABELS: Record<string, { label: string; icon: any; color: string }> =
   get_chat_messages:   { label: "Sohbet okunuyor",         icon: MessageSquare, color: "text-yellow-500" },
   delete_chat_message: { label: "Mesaj siliniyor",         icon: MessageSquare, color: "text-red-500" },
   ban_user:            { label: "Kullanıcı banlanıyor",    icon: Database, color: "text-red-500" },
+  find_team_logo:      { label: "Logo internette aranıyor", icon: Trophy,  color: "text-purple-400" },
 };
 
 // ── SSE event types ───────────────────────────────────────────────────────────
