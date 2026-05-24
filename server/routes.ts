@@ -46,24 +46,47 @@ Logo bulma talimatları:
 
 Sen sadece admin için çalışıyorsun. Ultra gelişmiş, efsane bir AI asistansın.`;;
 
+// Allowed image MIME types for upload
+const ALLOWED_MIME = new Set(["image/jpeg", "image/png", "image/gif", "image/webp", "image/svg+xml"]);
+const ALLOWED_EXT  = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg"]);
+
 const storage_multer = multer.diskStorage({
   destination: function (req, file, cb) {
     const dir = 'uploads/';
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir);
-    }
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
   filename: function (req, file, cb) {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_EXT.has(ext)) return cb(new Error("İzin verilmeyen dosya uzantısı"), "");
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    cb(null, uniqueSuffix + ext);
   }
 });
 
-const upload = multer({ 
+const upload = multer({
   storage: storage_multer,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
+  limits: { fileSize: 3 * 1024 * 1024 }, // 3 MB
+  fileFilter: (_req, file, cb) => {
+    if (!ALLOWED_MIME.has(file.mimetype)) {
+      return cb(new Error("Sadece görsel dosyalar yüklenebilir (JPG, PNG, GIF, WEBP, SVG)"));
+    }
+    cb(null, true);
+  },
 });
+
+// Simple in-memory rate limiter for login (no extra package needed)
+const loginAttempts = new Map<string, { count: number; resetAt: number }>();
+function checkRateLimit(ip: string, max = 10, windowMs = 60_000): boolean {
+  const now = Date.now();
+  const entry = loginAttempts.get(ip);
+  if (!entry || now > entry.resetAt) {
+    loginAttempts.set(ip, { count: 1, resetAt: now + windowMs });
+    return true;
+  }
+  entry.count++;
+  return entry.count <= max;
+}
 
 declare module 'express-session' {
   interface SessionData {
@@ -78,31 +101,46 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  // Serve uploads statically
-  app.use('/uploads', express.static('uploads'));
-  
-  // File upload route
-  app.post("/api/upload", upload.single('file'), (req, res) => {
-    if (!req.file) {
-      return res.status(400).json({ message: "No file uploaded" });
-    }
-    const url = `/uploads/${req.file.filename}`;
-    res.json({ url });
+
+  // ── Security headers (apply to all responses) ──────────────────────────────
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("X-XSS-Protection", "1; mode=block");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+    res.setHeader(
+      "Content-Security-Policy",
+      "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://fonts.googleapis.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https:;"
+    );
+    next();
   });
-  
-  // Session setup
-  const SessionStore = MemoryStore(session);
-  app.use(session({
-    secret: process.env.SESSION_SECRET || 'auren-league-secret',
-    resave: false,
-    saveUninitialized: true,
-    store: new SessionStore({
-      checkPeriod: 86400000 // prune expired entries every 24h
-    }),
-    cookie: { maxAge: 86400000 }
+
+  // ── Serve uploads statically (images only, no directory listing) ───────────
+  app.use('/uploads', express.static('uploads', {
+    index: false,
+    dotfiles: 'deny',
+    setHeaders: (res) => {
+      res.setHeader("Content-Disposition", "inline");
+      res.setHeader("X-Content-Type-Options", "nosniff");
+    }
   }));
 
-  // Middleware to assign session identity
+  // ── Session setup (MUST come before any route that needs req.session) ───────
+  const SessionStore = MemoryStore(session);
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'auren-league-fallback-change-me',
+    resave: false,
+    saveUninitialized: false,          // don't create sessions for bots/crawlers
+    store: new SessionStore({ checkPeriod: 86400000 }),
+    cookie: {
+      maxAge: 86400000,                // 24 h
+      httpOnly: true,                  // JS cannot read the cookie (XSS protection)
+      sameSite: 'strict',              // CSRF protection
+      secure: process.env.NODE_ENV === 'production', // HTTPS-only in prod
+    }
+  }));
+
+  // ── Session identity middleware ────────────────────────────────────────────
   let nextAnonymousId = 1;
   app.use(async (req, res, next) => {
     if (!req.session.anonymousId) {
@@ -121,6 +159,16 @@ export async function registerRoutes(
     }
 
     next();
+  });
+
+  // ── File upload (admin only, images only, AFTER session middleware) ─────────
+  app.post("/api/upload", (req, res, next) => {
+    if (!req.session.isAdmin) return res.status(403).json({ message: "Yetkisiz erişim." });
+    next();
+  }, upload.single('file'), (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "Dosya yüklenmedi." });
+    const url = `/uploads/${req.file.filename}`;
+    res.json({ url });
   });
 
   // Auth Routes
@@ -149,18 +197,28 @@ export async function registerRoutes(
   });
 
   app.post(api.auth.login.path, async (req, res) => {
+    // Rate limiting: max 10 attempts per minute per IP
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
+    if (!checkRateLimit(ip, 10, 60_000)) {
+      return res.status(429).json({ message: "Çok fazla giriş denemesi. 1 dakika sonra tekrar deneyin." });
+    }
+
     const { username, password } = req.body;
-    
-    // Hardcoded admin check for legacy support
+    if (!username || !password || typeof username !== "string" || typeof password !== "string") {
+      return res.status(400).json({ message: "Geçersiz istek." });
+    }
+
+    // Hardcoded admin check
     if (username === "Kralbaba12" && password === "Admin2026") {
       req.session.isAdmin = true;
+      req.session.identifier = "Kralbaba12";
       return res.json({ success: true, isAdmin: true });
     }
 
     const user = await storage.getUserByUsername(username);
     if (user && user.password === password) {
       req.session.userId = user.id;
-      req.session.isAdmin = user.isAdmin || user.username === "Kralbaba12";
+      req.session.isAdmin = !!(user.isAdmin || user.username === "Kralbaba12");
       res.json({ success: true, isAdmin: req.session.isAdmin });
     } else {
       res.status(401).json({ message: "Hatalı kullanıcı adı veya şifre" });
@@ -315,22 +373,28 @@ export async function registerRoutes(
 
   app.post(api.chat.send.path, async (req, res) => {
     const { content } = req.body;
+
+    // Validate content
+    if (!content || typeof content !== "string") {
+      return res.status(400).json({ message: "Geçersiz mesaj." });
+    }
+    const trimmed = content.trim();
+    if (trimmed.length === 0) return res.status(400).json({ message: "Mesaj boş olamaz." });
+    if (trimmed.length > 500) return res.status(400).json({ message: "Mesaj en fazla 500 karakter olabilir." });
+
     let senderName = `Anonymous ${req.session.anonymousId}`;
     let senderAvatar = null;
-    
+
     if (req.session.userId) {
       const user = await storage.getUser(req.session.userId);
-      if (user) {
-        senderName = user.username;
-        senderAvatar = user.avatarUrl;
-      }
+      if (user) { senderName = user.username; senderAvatar = user.avatarUrl; }
     } else if (req.session.isAdmin) {
       senderName = "Kralbaba12";
-      senderAvatar = "/uploads/admin-avatar.png"; // Varsayılan admin avatarı veya null
+      senderAvatar = null;
     }
-    
+
     const message = await storage.createMessage({
-      content,
+      content: trimmed,
       senderName,
       senderAvatar,
       isAdmin: req.session.isAdmin === true,
