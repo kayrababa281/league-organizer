@@ -103,7 +103,9 @@ export async function registerRoutes(
 ): Promise<Server> {
 
   // ── Security headers (apply to all responses) ──────────────────────────────
+  app.disable("x-powered-by"); // Don't reveal Express
   app.use((_req, res, next) => {
+    res.removeHeader("X-Powered-By");
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
     res.setHeader("X-XSS-Protection", "1; mode=block");
@@ -217,9 +219,16 @@ export async function registerRoutes(
 
     const user = await storage.getUserByUsername(username);
     if (user && user.password === password) {
-      req.session.userId = user.id;
-      req.session.isAdmin = !!(user.isAdmin || user.username === "Kralbaba12");
-      res.json({ success: true, isAdmin: req.session.isAdmin });
+      // Regenerate session on login to prevent session fixation attacks
+      req.session.regenerate((err) => {
+        if (err) return res.status(500).json({ message: "Oturum hatası." });
+        req.session.userId = user.id;
+        // isAdmin is NEVER granted from DB — only hardcoded credentials above
+        req.session.isAdmin = false;
+        req.session.identifier = user.username;
+        req.session.anonymousId = undefined;
+        res.json({ success: true, isAdmin: false });
+      });
     } else {
       res.status(401).json({ message: "Hatalı kullanıcı adı veya şifre" });
     }
@@ -300,7 +309,9 @@ export async function registerRoutes(
 
   app.patch("/api/admin/users/:id", async (req, res) => {
     if (!req.session.isAdmin) return res.status(403).json({ message: "Unauthorized" });
-    const user = await storage.updateUser(Number(req.params.id), req.body);
+    // Strip dangerous fields — isAdmin can NEVER be set via this endpoint
+    const { isAdmin: _ia, id: _id, ...safeUpdates } = req.body;
+    const user = await storage.updateUser(Number(req.params.id), safeUpdates);
     res.json(user);
   });
 

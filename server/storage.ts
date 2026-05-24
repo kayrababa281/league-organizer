@@ -65,7 +65,9 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateUser(id: number, updates: Partial<User>): Promise<User> {
-    const [updated] = await db.update(users).set(updates).where(eq(users.id, id)).returning();
+    // isAdmin is NEVER writable via updateUser — this prevents privilege escalation
+    const { isAdmin: _stripped, ...safeUpdates } = updates as any;
+    const [updated] = await db.update(users).set(safeUpdates).where(eq(users.id, id)).returning();
     return updated;
   }
 
