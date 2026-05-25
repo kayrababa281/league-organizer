@@ -830,127 +830,144 @@ export async function registerRoutes(
         if (!vid) return { error: "videoId gerekli" };
 
         try {
-          // Fetch video page to extract storyboard spec and duration
+          // ── Step 1: Fetch watch page → ytInitialPlayerResponse ─────────────
           const pageRes = await fetch(`https://www.youtube.com/watch?v=${vid}`, {
             headers: {
-              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
               "Accept-Language": "tr-TR,tr;q=0.9",
             },
           });
           const html = await pageRes.text();
 
-          // Title
-          const titleMatch = html.match(/<title>([^<]+)<\/title>/);
-          const title = titleMatch ? titleMatch[1].replace(/ - YouTube$/, "").trim() : "";
+          const prMatch = html.match(/var ytInitialPlayerResponse\s*=\s*(\{.+?\});(?:\s*var|\s*<\/script>)/s);
+          if (!prMatch) return { error: "ytInitialPlayerResponse bulunamadı (sayfa yüklenmedi?)", videoId: vid };
 
-          // Duration
-          const durMatch = html.match(/"approxDurationMs":"(\d+)"/);
-          const durationMs = durMatch ? parseInt(durMatch[1]) : 0;
-          const durationMins = Math.floor(durationMs / 60000);
+          const playerResp: any = JSON.parse(prMatch[1]);
+          const title: string = playerResp.videoDetails?.title || vid;
+          const durationSecs = parseInt(playerResp.videoDetails?.lengthSeconds || "0");
+          const durationMins = Math.floor(durationSecs / 60);
 
-          // Storyboard spec — YouTube embeds it as JSON
-          const sbMatch = html.match(/"playerStoryboardSpecRenderer":\s*\{"spec":"([^"]+)"/);
-          if (!sbMatch) {
-            return {
-              videoId: vid, title, durationMins,
-              error: "Storyboard bulunamadı. Video henüz işlenmemiş veya özel/gizli olabilir.",
-            };
+          // ── Step 2: Parse storyboard spec ─────────────────────────────────
+          // Spec format: BASE_URL_with_$L_$N|L0_params|L1_params|L2_params...
+          // Level params: width#height#count#nx#ny#intervalMs#id#sig
+          const specStr: string = playerResp.storyboards?.playerStoryboardSpecRenderer?.spec || "";
+          if (!specStr) {
+            return { videoId: vid, title, durationMins, error: "Storyboard spec bulunamadı. Video özel veya henüz işlenmemiş olabilir." };
           }
 
-          // Decode the spec string (has \u0026 etc.)
-          const specRaw = sbMatch[1]
-            .replace(/\\u0026/g, "&")
-            .replace(/\\u003d/gi, "=")
-            .replace(/\\/g, "");
+          const specParts = specStr.split("|");
+          const baseUrlTemplate = specParts[0]; // has $L and $N placeholders
 
-          // Spec format: BASE_URL|w|h|nx|ny|interval_ms|id#level1_spec#level2_spec
-          // Each segment after # is a separate resolution level
-          const segments = specRaw.split("#");
-          const baseUrlRaw = segments[0];
-
-          // Pick the highest available level (last segment = highest res)
-          const highestLevel = segments.length - 1; // 0-indexed
-          const levelSpec = segments[highestLevel] || segments[0];
-          const sp = levelSpec.split("|");
-          const frameW = parseInt(sp[0]) || 160;
-          const frameH = parseInt(sp[1]) || 90;
-          const countX = parseInt(sp[2]) || 5;
-          const countY = parseInt(sp[3]) || 5;
-          const intervalMs = parseInt(sp[4]) || 5000;
-          const framesPerImage = countX * countY;
-
-          const totalFrames = durationMs > 0 ? Math.ceil(durationMs / intervalMs) : 100;
-          const totalImages = Math.ceil(totalFrames / framesPerImage);
-
-          // Grab last 4 storyboard images (covers the final ~few minutes)
-          const startIdx = Math.max(0, totalImages - 4);
-          const fetchIndices = Array.from({ length: totalImages - startIdx }, (_, i) => startIdx + i);
-
-          // Build image URLs — swap the M{n} portion in the base URL
-          // baseUrl looks like: https://i9.ytimg.com/sb/VIDEO_ID/storyboard3_L0/M0.jpg?sqp=...&sigh=...
-          const imageUrls = fetchIndices.map(idx => {
-            // Replace M{n} pattern (the storyboard image index)
-            const lvlUrl = baseUrlRaw.replace(/\/storyboard3_L\d+\//, `/storyboard3_L${highestLevel}/`);
-            return lvlUrl.replace(/M\d+\.jpg/, `M${idx}.jpg`);
+          // Parse levels (skip index 0 which is base URL)
+          const levels = specParts.slice(1).map((p) => {
+            const f = p.split("#");
+            return {
+              w: parseInt(f[0]) || 0,
+              h: parseInt(f[1]) || 0,
+              count: parseInt(f[2]) || 0,
+              nx: parseInt(f[3]) || 0,
+              ny: parseInt(f[4]) || 0,
+              intervalMs: parseInt(f[5]) || 0,
+              idTemplate: f[6] || "",
+              sig: f[7] || "",
+            };
           });
 
-          // Fetch each storyboard image as base64
-          const b64Images: string[] = [];
-          await Promise.all(imageUrls.map(async (url) => {
-            try {
-              const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
-              if (r.ok) {
-                const buf = Buffer.from(await r.arrayBuffer());
-                b64Images.push(buf.toString("base64"));
-              }
-            } catch { /* skip */ }
-          }));
+          // Pick best level with valid intervals (prefer higher quality)
+          const validLevels = levels.filter((l) => l.intervalMs > 0 && l.nx > 0 && l.ny > 0 && l.sig);
+          if (validLevels.length === 0) {
+            return { videoId: vid, title, durationMins, error: "Geçerli storyboard seviyesi bulunamadı." };
+          }
+          // Use highest quality level available (last valid)
+          const lvlIdx = levels.findLastIndex((l) => l.intervalMs > 0 && l.nx > 0 && l.ny > 0 && l.sig);
+          const lvl = levels[lvlIdx];
+          const framesPerSprite = lvl.nx * lvl.ny;
+          const intervalSecs = lvl.intervalMs / 1000;
+          const totalFrames = durationSecs > 0 ? Math.ceil(durationSecs / intervalSecs) : lvl.count;
+          const totalSprites = Math.ceil(totalFrames / framesPerSprite);
 
-          if (b64Images.length === 0) {
-            return { videoId: vid, title, durationMins, error: "Storyboard görselleri indirilemedi", triedUrls: imageUrls };
+          // Which sprites cover the last ~120 seconds?
+          const windowSecs = 120;
+          const startFrameIdx = Math.max(0, Math.floor((durationSecs - windowSecs) / intervalSecs));
+          const startSprite = Math.floor(startFrameIdx / framesPerSprite);
+          const endSprite = totalSprites - 1;
+
+          // Build sprite URLs
+          const spriteIndices = Array.from(
+            { length: endSprite - startSprite + 1 },
+            (_, i) => startSprite + i
+          ).slice(-4); // at most last 4 sprites
+
+          const spriteUrls = spriteIndices.map((idx) => {
+            const n = lvl.idTemplate.replace("$M", String(idx));
+            return baseUrlTemplate
+              .replace("$L", String(lvlIdx))
+              .replace("$N", n)
+              + "&sigh=" + lvl.sig;
+          });
+
+          // ── Step 3: Fetch sprite images ────────────────────────────────────
+          const b64Sprites: string[] = [];
+          await Promise.all(
+            spriteUrls.map(async (url) => {
+              try {
+                const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+                if (r.ok) {
+                  const buf = Buffer.from(await r.arrayBuffer());
+                  b64Sprites.push(buf.toString("base64"));
+                }
+              } catch { /* skip */ }
+            })
+          );
+
+          if (b64Sprites.length === 0) {
+            return { videoId: vid, title, durationMins, error: "Storyboard görselleri indirilemedi.", triedUrls: spriteUrls.slice(0, 2) };
           }
 
-          // Send to GPT-4o Vision
-          const visionMessages: any[] = [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "text",
-                  text: `Bunlar "${title}" YouTube canlı yayın kaydının son ${durationMins > 0 ? durationMins : "?"} dakikasına ait storyboard karelerdir (her kare yaklaşık ${Math.round(intervalMs / 1000)} saniyelik aralıklarla alınmıştır). Her görüntüde ${countX}x${countY} mini kare bulunur.
-
-Görevin: Maç sonu istatistik ekranını veya skor tablosunu bul. Eğer görüyorsan şunları çıkar:
-- Final skoru (örn: Napoli 3 - Arsenal 1)
-- Gol atan oyuncular (isim + dakika varsa)
-- Asist yapan oyuncular
-- Sarı kart / kırmızı kart alanlar
-- Kaleci clean sheet bilgisi
-- Herhangi bir istatistik ekranı (top hakimiyeti, şut sayısı vb.)
-
-Eğer maç istatistik ekranı bu görüntülerde görünmüyorsa bunu belirt.
-Türkçe yanıt ver.`,
-                },
-                ...b64Images.map((b64) => ({
-                  type: "image_url",
-                  image_url: { url: `data:image/jpeg;base64,${b64}`, detail: "high" },
-                })),
-              ],
-            },
-          ];
-
+          // ── Step 4: GPT-4o Vision ──────────────────────────────────────────
+          const frameInfo = `${lvl.w * lvl.nx}x${lvl.h * lvl.ny} piksel, her sprite ${lvl.nx}x${lvl.ny} mini kare (her kare ${intervalSecs}s aralıklı, ${lvl.w}x${lvl.h}px)`;
           const visionRes = await openai.chat.completions.create({
             model: "gpt-4o",
             max_tokens: 1500,
-            messages: visionMessages,
+            messages: [
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text: `Bunlar "${title}" YouTube canlı yayın kaydının SON ${windowSecs} SANİYESİNE ait storyboard sprite görüntüleridir (${frameInfo}).
+
+Her sprite görüntüsünde ${lvl.nx}x${lvl.ny} mini kare bulunur. Kareler soldan sağa, yukarıdan aşağıya doğru kronolojik sıralıdır. En son kareler en sağ-alttadır.
+
+Görevin: Maç sonu istatistik/skor ekranını bul:
+- Final skoru (hangi takım kaç kaç)
+- Gol atan oyuncular + dakikaları
+- Asist yapanlar
+- Sarı / kırmızı kart alanlar
+- Kaleci clean sheet bilgisi
+- Varsa diğer istatistikler
+
+Ekranda görülen HER şeyi yaz. Eğer stats ekranı görünmüyorsa veya net değilse bunu söyle.
+Türkçe yanıt ver.`,
+                  },
+                  ...b64Sprites.map((b64) => ({
+                    type: "image_url",
+                    image_url: { url: `data:image/jpeg;base64,${b64}`, detail: "high" },
+                  })),
+                ],
+              },
+            ],
           });
 
           const analysis = visionRes.choices[0]?.message?.content || "Görsel analiz sonucu alınamadı.";
-
           return {
-            videoId: vid, title, durationMins,
-            storyboardLevel: highestLevel,
-            framesAnalyzed: b64Images.length,
-            intervalPerFrameSecs: Math.round(intervalMs / 1000),
+            videoId: vid,
+            title,
+            durationMins,
+            storyboardLevel: lvlIdx,
+            frameSize: `${lvl.w}x${lvl.h}`,
+            intervalSecs,
+            spritesAnalyzed: b64Sprites.length,
             analysis,
           };
         } catch (e) {
