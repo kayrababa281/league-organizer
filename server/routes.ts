@@ -44,6 +44,24 @@ Logo bulma talimatları:
   4. Bulunamazsa takımı atla, sonuçları özetle
 - find_team_logo birden fazla takım için paralel çağrılabilir (her biri ayrı tool_call)
 
+YouTube kanal analiz talimatları:
+- Kanal: https://youtube.com/@aurenligfc26
+- "YouTube'a bak", "kanalı incele", "maçları bul", "canlı yayınları analiz et", "[hafta] haftasına bak" gibi isteklerde:
+  1. fetch_youtube_channel ile son videoların listesini al (başlıklar + tarihler + kısa açıklamalar)
+  2. İlgili videolar için (özellikle "canlı yayın", "maç", "hft", "hafta", "cup", "final" gibi kelimeleri içerenler) fetch_video_details çağır
+  3. Video başlıkları ve açıklamalarından şunları çıkar:
+     - Maç sonucu (hangi takım kaç kaç kazandı)
+     - Haftası veya tur adı (tournament)
+     - Gol atan oyuncular ve kaçıncı dakikada attıkları
+     - Asist yapan oyuncular
+     - Sarı/kırmızı kart alan oyuncular
+     - Kaleci kalesini gole kapatmışsa clean sheet
+  4. Bulduklarını açık ve detaylı özetle: "X. Haftada A Takımı 3-1 B Takımı, goller: Oyuncu (23', 67'), Oyuncu2 (55')"
+  5. Admin isterse veritabanını güncelle (update_match_score, update_player) ama önce sor
+- Bir hafta belirtilmişse sadece o haftanın videosuna odaklan
+- Video açıklaması boşsa sadece başlıktan çıkarabildiğini söyle
+- Hızlı ol: fetch_video_details'ı birden fazla video için paralel çağırabilirsin
+
 Sen sadece admin için çalışıyorsun. Ultra gelişmiş, efsane bir AI asistansın.`;;
 
 // Allowed image MIME types for upload
@@ -533,6 +551,28 @@ export async function registerRoutes(
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "fetch_youtube_channel",
+        description: "Auren Lig YouTube kanalındaki (@aurenligfc26) son 20 videoyu listeler. Her videonun başlığı, yayın tarihi, video ID ve kısa açıklamasını döner. Maç sonuçlarını ve istatistikleri bulmak için önce bunu çağır.",
+        parameters: { type: "object", properties: {} },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "fetch_video_details",
+        description: "Belirtilen YouTube video ID'si için videonun tam başlığını ve açıklama metnini döner. Video açıklamasında genellikle maç skoru, goller ve istatistikler bulunur.",
+        parameters: {
+          type: "object",
+          properties: {
+            videoId: { type: "string", description: "YouTube video ID (örn: dQw4w9WgXcQ)" },
+          },
+          required: ["videoId"],
+        },
+      },
+    },
   ];
 
   // Execute an AI tool call against real DB/storage
@@ -561,6 +601,109 @@ export async function registerRoutes(
       case "get_chat_messages": return await storage.getMessages();
       case "delete_chat_message": await storage.deleteMessage(args.id); return { ok: true };
       case "ban_user": return await storage.banUser(args.identifier, "AI tarafından yasaklandı");
+
+      case "fetch_youtube_channel": {
+        const CHANNEL_URL = "https://www.youtube.com/@aurenligfc26";
+        let channelId = "";
+
+        // Step 1: Resolve handle → channel ID from the channel page HTML
+        try {
+          const pageRes = await fetch(CHANNEL_URL + "/videos", {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+              "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
+            },
+          });
+          const html = await pageRes.text();
+          // Multiple patterns YouTube embeds
+          const patterns = [
+            /"channelId":"(UC[A-Za-z0-9_-]{22})"/,
+            /"externalId":"(UC[A-Za-z0-9_-]{22})"/,
+            /channel\/(UC[A-Za-z0-9_-]{22})/,
+          ];
+          for (const p of patterns) {
+            const m = html.match(p);
+            if (m) { channelId = m[1]; break; }
+          }
+        } catch (e) {
+          return { error: "Kanal sayfası alınamadı: " + String(e) };
+        }
+
+        if (!channelId) {
+          return { error: "Kanal ID bulunamadı. YouTube sayfası yapısı değişmiş olabilir.", hint: CHANNEL_URL };
+        }
+
+        // Step 2: Fetch YouTube RSS feed (no API key needed)
+        try {
+          const rssRes = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`, {
+            headers: { "User-Agent": "Mozilla/5.0" },
+          });
+          if (!rssRes.ok) return { error: `RSS feed HTTP ${rssRes.status}`, channelId };
+          const rssText = await rssRes.text();
+
+          // Simple regex XML parser
+          const entryBlocks = rssText.match(/<entry>[\s\S]*?<\/entry>/g) || [];
+          const decode = (s: string) =>
+            s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+
+          const videos = entryBlocks.slice(0, 20).map((block) => {
+            const videoId   = (block.match(/<yt:videoId>(.*?)<\/yt:videoId>/) || [])[1] || "";
+            const title     = decode((block.match(/<title>(.*?)<\/title>/) || [])[1] || "");
+            const published = (block.match(/<published>(.*?)<\/published>/) || [])[1] || "";
+            const desc      = decode((block.match(/<media:description>([\s\S]*?)<\/media:description>/) || [])[1] || "").slice(0, 600);
+            const views     = (block.match(/<media:statistics views="(\d+)"/) || [])[1] || "0";
+            return { videoId, title, published: published.slice(0, 10), url: `https://youtu.be/${videoId}`, description: desc, views };
+          });
+
+          return { channelId, channel: "@aurenligfc26", totalFetched: videos.length, videos };
+        } catch (e) {
+          return { error: "RSS feed parse hatası: " + String(e), channelId };
+        }
+      }
+
+      case "fetch_video_details": {
+        const vid = (args.videoId || "").trim();
+        if (!vid) return { error: "videoId gerekli" };
+
+        try {
+          const res = await fetch(`https://www.youtube.com/watch?v=${vid}`, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+              "Accept-Language": "tr-TR,tr;q=0.9",
+            },
+          });
+          const html = await res.text();
+
+          // Extract short description (first ~3000 chars)
+          const descMatch = html.match(/"shortDescription":"((?:[^"\\]|\\.)*)"/);
+          let description = "";
+          if (descMatch) {
+            description = descMatch[1]
+              .replace(/\\n/g, "\n")
+              .replace(/\\"/g, '"')
+              .replace(/\\\\/g, "\\")
+              .replace(/\\u([\dA-Fa-f]{4})/g, (_, hex) => String.fromCodePoint(parseInt(hex, 16)));
+          }
+
+          // Extract title
+          const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+          const title = titleMatch ? titleMatch[1].replace(/ - YouTube$/, "").trim() : "";
+
+          // Extract publish date
+          const dateMatch = html.match(/"publishDate":"([^"]+)"/);
+          const publishDate = dateMatch ? dateMatch[1] : "";
+
+          return {
+            videoId: vid,
+            title,
+            publishDate,
+            url: `https://youtu.be/${vid}`,
+            description: description.slice(0, 4000),
+          };
+        } catch (e) {
+          return { error: "Video detayları alınamadı: " + String(e), videoId: vid };
+        }
+      }
 
       case "find_team_logo": {
         const name = (args.teamName || "").trim();
