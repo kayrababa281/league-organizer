@@ -6,6 +6,9 @@ import { createServer } from "http";
 const app = express();
 const httpServer = createServer(app);
 
+// Trust Replit's reverse proxy so secure cookies work over HTTPS in production
+app.set('trust proxy', 1);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;

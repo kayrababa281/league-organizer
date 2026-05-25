@@ -157,7 +157,7 @@ export async function registerRoutes(
     cookie: {
       maxAge: 86400000,                // 24 h
       httpOnly: true,                  // JS cannot read the cookie (XSS protection)
-      sameSite: 'strict',              // CSRF protection
+      sameSite: 'lax',                 // 'lax' works correctly behind Replit proxy
       secure: process.env.NODE_ENV === 'production', // HTTPS-only in prod
     }
   }));
