@@ -427,6 +427,22 @@ export async function registerRoutes(
     res.status(201).send();
   });
 
+  // Get all banned users (admin)
+  app.get("/api/chat/banned", async (req, res) => {
+    if (!req.session.isAdmin) return res.status(403).json({ message: "Unauthorized" });
+    const banned = await storage.getBannedUsers();
+    res.json(banned);
+  });
+
+  // Unban user (admin)
+  app.delete("/api/chat/ban", async (req, res) => {
+    if (!req.session.isAdmin) return res.status(403).json({ message: "Unauthorized" });
+    const { identifier } = req.body;
+    if (!identifier) return res.status(400).json({ message: "identifier gerekli" });
+    await storage.unbanUser(identifier);
+    res.status(204).send();
+  });
+
 
   // Helper to recalculate all stats
   async function recalculateLeagueTable() {
@@ -605,6 +621,19 @@ export async function registerRoutes(
     const { title } = req.body;
     const [conv] = await db.insert(aiConversations).values({ title: title || "Yeni Sohbet" }).returning();
     res.status(201).json(conv);
+  });
+
+  // Rename a conversation
+  app.patch("/api/ai/conversations/:id", async (req, res) => {
+    if (!req.session.isAdmin) return res.status(403).json({ message: "Yetkisiz erişim." });
+    const id = parseInt(req.params.id);
+    const { title } = req.body;
+    if (!title) return res.status(400).json({ message: "title gerekli" });
+    const [updated] = await db.update(aiConversations)
+      .set({ title, updatedAt: new Date() })
+      .where(eq(aiConversations.id, id))
+      .returning();
+    res.json(updated);
   });
 
   // Delete a conversation

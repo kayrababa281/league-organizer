@@ -45,6 +45,8 @@ export interface IStorage {
   // Ban system
   banUser(identifier: string, reason?: string): Promise<BannedUser>;
   isBanned(identifier: string): Promise<boolean>;
+  getBannedUsers(): Promise<BannedUser[]>;
+  unbanUser(identifier: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -184,6 +186,14 @@ export class DatabaseStorage implements IStorage {
   async isBanned(identifier: string): Promise<boolean> {
     const [ban] = await db.select().from(bannedUsers).where(eq(bannedUsers.identifier, identifier));
     return !!ban;
+  }
+
+  async getBannedUsers(): Promise<BannedUser[]> {
+    return await db.select().from(bannedUsers).orderBy(desc(bannedUsers.bannedAt));
+  }
+
+  async unbanUser(identifier: string): Promise<void> {
+    await db.delete(bannedUsers).where(eq(bannedUsers.identifier, identifier));
   }
 }
 
