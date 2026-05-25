@@ -214,19 +214,20 @@ export async function registerRoutes(
     if (username === "Kralbaba12" && password === "Admin2026") {
       req.session.isAdmin = true;
       req.session.identifier = "Kralbaba12";
-      return res.json({ success: true, isAdmin: true });
+      return req.session.save((err) => {
+        if (err) return res.status(500).json({ message: "Oturum kaydedilemedi." });
+        res.json({ success: true, isAdmin: true });
+      });
     }
 
     const user = await storage.getUserByUsername(username);
     if (user && user.password === password) {
-      // Regenerate session on login to prevent session fixation attacks
-      req.session.regenerate((err) => {
-        if (err) return res.status(500).json({ message: "Oturum hatası." });
-        req.session.userId = user.id;
-        // isAdmin is NEVER granted from DB — only hardcoded credentials above
-        req.session.isAdmin = false;
-        req.session.identifier = user.username;
-        req.session.anonymousId = undefined;
+      // isAdmin is NEVER granted from DB — only via hardcoded Kralbaba12 credentials above
+      req.session.userId = user.id;
+      req.session.isAdmin = false;
+      req.session.identifier = user.username;
+      req.session.save((err) => {
+        if (err) return res.status(500).json({ message: "Oturum kaydedilemedi." });
         res.json({ success: true, isAdmin: false });
       });
     } else {
