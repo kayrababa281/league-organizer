@@ -44,23 +44,29 @@ Logo bulma talimatları:
   4. Bulunamazsa takımı atla, sonuçları özetle
 - find_team_logo birden fazla takım için paralel çağrılabilir (her biri ayrı tool_call)
 
-YouTube kanal analiz talimatları:
+YouTube kanal analiz talimatları (MAÇLAR CANLI YAYINDA OLUYOR):
 - Kanal: https://youtube.com/@aurenligfc26
-- "YouTube'a bak", "kanalı incele", "maçları bul", "canlı yayınları analiz et", "[hafta] haftasına bak" gibi isteklerde:
-  1. fetch_youtube_channel ile son videoların listesini al (başlıklar + tarihler + kısa açıklamalar)
-  2. İlgili videolar için (özellikle "canlı yayın", "maç", "hft", "hafta", "cup", "final" gibi kelimeleri içerenler) fetch_video_details çağır
-  3. Video başlıkları ve açıklamalarından şunları çıkar:
-     - Maç sonucu (hangi takım kaç kaç kazandı)
-     - Haftası veya tur adı (tournament)
-     - Gol atan oyuncular ve kaçıncı dakikada attıkları
+- Maçlar canlı yayında oynanıyor — yayın bittikten sonra YouTube otomatik altyazı (transcript) üretiyor
+- "YouTube'a bak", "kanalı incele", "maçları bul", "canlı yayınları analiz et", "[N]. haftaya bak" gibi isteklerde:
+  1. fetch_youtube_channel ile son videoların listesini al
+  2. İlgili videolar için (başlığında "hft", "hafta", "cup", "final", "vs", "canlı" geçenler) ÖNCE fetch_video_transcript çağır
+     - Transcript varsa: maç yorumundan gol, asist, kart olaylarını ve zamanları çıkar
+     - Transcript yoksa (yayın henüz bitmemiş veya bekliyor): fetch_video_details ile açıklama metnine bak
+  3. Transcript/açıklamadan şunları çıkar:
+     - Nihai skor (hangi takım kaç kaç kazandı)
+     - Haftası veya tur adı
+     - Gol atan oyuncular ve kaçıncı dakikada (transcript'te "[MM:SS] GOL! ..." gibi geçer)
      - Asist yapan oyuncular
      - Sarı/kırmızı kart alan oyuncular
-     - Kaleci kalesini gole kapatmışsa clean sheet
-  4. Bulduklarını açık ve detaylı özetle: "X. Haftada A Takımı 3-1 B Takımı, goller: Oyuncu (23', 67'), Oyuncu2 (55')"
-  5. Admin isterse veritabanını güncelle (update_match_score, update_player) ama önce sor
+     - Kaleci clean sheet yaptıysa
+  4. Bulduklarını net özetle:
+     "**2. Hafta:** Napoli 3-1 Arsenal
+     ⚽ Goller: Messi (23'), Ronaldo (67', 89') | Asist: Neymar (2x)
+     🟨 Sarı kart: Salah (45') | 🟥 Kırmızı kart: Yok"
+  5. Admin isterse veritabanını güncelle (update_match_score, update_player) — ama önce mutlaka sor
 - Bir hafta belirtilmişse sadece o haftanın videosuna odaklan
-- Video açıklaması boşsa sadece başlıktan çıkarabildiğini söyle
-- Hızlı ol: fetch_video_details'ı birden fazla video için paralel çağırabilirsin
+- fetch_video_transcript birden fazla video için paralel çağrılabilir (hızlı ol)
+- Transcript belirsizse: "Transcript okundu ama belirli bir olay bulunamadı, şunları gördüm: ..." de
 
 Sen sadece admin için çalışıyorsun. Ultra gelişmiş, efsane bir AI asistansın.`;;
 
@@ -563,11 +569,25 @@ export async function registerRoutes(
       type: "function",
       function: {
         name: "fetch_video_details",
-        description: "Belirtilen YouTube video ID'si için videonun tam başlığını ve açıklama metnini döner. Video açıklamasında genellikle maç skoru, goller ve istatistikler bulunur.",
+        description: "Belirtilen YouTube video ID'si için videonun tam başlığını ve açıklama metnini döner.",
         parameters: {
           type: "object",
           properties: {
             videoId: { type: "string", description: "YouTube video ID (örn: dQw4w9WgXcQ)" },
+          },
+          required: ["videoId"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "fetch_video_transcript",
+        description: "YouTube video/canlı yayın kaydının otomatik oluşturulan altyazı/transcript metnini çeker. Canlı yayınlar bittikten sonra YouTube otomatik altyazı üretir. Maç yorumundan gol, asist, kart, skor bilgilerini bu araçla çıkarabilirsin. Önce Türkçe, yoksa İngilizce altyazı dener.",
+        parameters: {
+          type: "object",
+          properties: {
+            videoId: { type: "string", description: "YouTube video ID" },
           },
           required: ["videoId"],
         },
@@ -702,6 +722,96 @@ export async function registerRoutes(
           };
         } catch (e) {
           return { error: "Video detayları alınamadı: " + String(e), videoId: vid };
+        }
+      }
+
+      case "fetch_video_transcript": {
+        const vid = (args.videoId || "").trim();
+        if (!vid) return { error: "videoId gerekli" };
+
+        try {
+          // Step 1: fetch video page to extract caption track URLs
+          const pageRes = await fetch(`https://www.youtube.com/watch?v=${vid}`, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+              "Accept-Language": "tr-TR,tr;q=0.9,en;q=0.8",
+            },
+          });
+          const html = await pageRes.text();
+
+          // Extract title for context
+          const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+          const title = titleMatch ? titleMatch[1].replace(/ - YouTube$/, "").trim() : "";
+
+          // Extract captionTracks JSON from page
+          const captionMatch = html.match(/"captionTracks":(\[.*?\])/);
+          if (!captionMatch) {
+            return {
+              videoId: vid, title,
+              error: "Bu video için altyazı/transcript bulunamadı. Canlı yayın henüz bitmemiş veya YouTube altyazı üretmemiş olabilir.",
+              tip: "Yayın bittikten 30-60 dk sonra tekrar dene."
+            };
+          }
+
+          // Parse caption tracks
+          let tracks: any[] = [];
+          try { tracks = JSON.parse(captionMatch[1]); } catch { tracks = []; }
+
+          // Prefer Turkish (tr), then auto-generated Turkish (a.tr), then English (en)
+          const pickTrack = (lang: string) => tracks.find((t: any) => t.languageCode === lang);
+          const track = pickTrack("tr") || pickTrack("a.tr") || pickTrack("en") || pickTrack("a.en") || tracks[0];
+
+          if (!track?.baseUrl) {
+            return { videoId: vid, title, error: "Kullanılabilir altyazı yok", availableLangs: tracks.map((t: any) => t.languageCode) };
+          }
+
+          // Step 2: fetch the transcript XML
+          const transcriptRes = await fetch(track.baseUrl + "&fmt=json3", {
+            headers: { "User-Agent": "Mozilla/5.0" },
+          });
+
+          if (!transcriptRes.ok) {
+            // Fallback: try XML format
+            const xmlRes = await fetch(track.baseUrl, { headers: { "User-Agent": "Mozilla/5.0" } });
+            if (!xmlRes.ok) return { videoId: vid, title, error: `Transcript HTTP ${xmlRes.status}` };
+            const xml = await xmlRes.text();
+            // Parse XML captions: <text start="..." dur="...">content</text>
+            const lines = [...xml.matchAll(/<text[^>]*start="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/g)]
+              .map(m => {
+                const secs = Math.floor(parseFloat(m[1]));
+                const mm = String(Math.floor(secs / 60)).padStart(2, "0");
+                const ss = String(secs % 60).padStart(2, "0");
+                const text = m[2]
+                  .replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">")
+                  .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/<[^>]+>/g, "");
+                return `[${mm}:${ss}] ${text.trim()}`;
+              });
+            return {
+              videoId: vid, title, language: track.languageCode, format: "xml",
+              transcript: lines.join("\n").slice(0, 18000),
+              totalLines: lines.length,
+            };
+          }
+
+          // Parse JSON3 format
+          const j3 = await transcriptRes.json() as any;
+          const events = (j3.events || []).filter((e: any) => e.segs);
+          const lines = events.map((e: any) => {
+            const secs = Math.floor((e.tStartMs || 0) / 1000);
+            const mm = String(Math.floor(secs / 60)).padStart(2, "0");
+            const ss = String(secs % 60).padStart(2, "0");
+            const text = (e.segs || []).map((s: any) => s.utf8 || "").join("").trim();
+            return text ? `[${mm}:${ss}] ${text}` : null;
+          }).filter(Boolean);
+
+          return {
+            videoId: vid, title, language: track.languageCode, format: "json3",
+            transcript: lines.join("\n").slice(0, 18000),
+            totalLines: lines.length,
+            tip: "Timestamp'ler dakika:saniye formatında. Gol, faul, kart gibi olayları ara.",
+          };
+        } catch (e) {
+          return { error: "Transcript alınamadı: " + String(e), videoId: vid };
         }
       }
 
