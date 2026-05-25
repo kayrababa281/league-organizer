@@ -44,29 +44,25 @@ Logo bulma talimatları:
   4. Bulunamazsa takımı atla, sonuçları özetle
 - find_team_logo birden fazla takım için paralel çağrılabilir (her biri ayrı tool_call)
 
-YouTube kanal analiz talimatları (MAÇLAR CANLI YAYINDA OLUYOR):
+YouTube kanal analiz talimatları (MAÇLAR CANLI YAYINDA OLUYOR — SPİKER YOK):
 - Kanal: https://youtube.com/@aurenligfc26
-- Maçlar canlı yayında oynanıyor — yayın bittikten sonra YouTube otomatik altyazı (transcript) üretiyor
-- "YouTube'a bak", "kanalı incele", "maçları bul", "canlı yayınları analiz et", "[N]. haftaya bak" gibi isteklerde:
+- Maçlar canlı yayında oynanır. Spiker yoktur. Maç sonunda ekranda istatistik tablosu/skor ekranı gösterilir.
+- EN DOĞRU YÖNTEM: analyze_match_screen — videonun son dakikalarındaki görüntüleri GPT-4o Vision ile okur. Skor ve istatistikler görsel olarak ekranda yazar.
+
+- "YouTube'a bak", "kanalı incele", "maçları bul", "[N]. haftaya bak", "son maçları getir" gibi isteklerde:
   1. fetch_youtube_channel ile son videoların listesini al
-  2. İlgili videolar için (başlığında "hft", "hafta", "cup", "final", "vs", "canlı" geçenler) ÖNCE fetch_video_transcript çağır
-     - Transcript varsa: maç yorumundan gol, asist, kart olaylarını ve zamanları çıkar
-     - Transcript yoksa (yayın henüz bitmemiş veya bekliyor): fetch_video_details ile açıklama metnine bak
-  3. Transcript/açıklamadan şunları çıkar:
-     - Nihai skor (hangi takım kaç kaç kazandı)
-     - Haftası veya tur adı
-     - Gol atan oyuncular ve kaçıncı dakikada (transcript'te "[MM:SS] GOL! ..." gibi geçer)
-     - Asist yapan oyuncular
-     - Sarı/kırmızı kart alan oyuncular
-     - Kaleci clean sheet yaptıysa
+  2. İlgili videolar için (başlığında "hft", "hafta", "cup", "final", "vs", "canlı" geçenler) paralel olarak analyze_match_screen çağır
+     - Bu araç videonun son karelerini görsel olarak okur — skor ekranını, istatistik tablosunu bulur
+  3. analyze_match_screen yeterli bilgi vermezse (görsel net değilse) ek olarak fetch_video_transcript dene
   4. Bulduklarını net özetle:
      "**2. Hafta:** Napoli 3-1 Arsenal
      ⚽ Goller: Messi (23'), Ronaldo (67', 89') | Asist: Neymar (2x)
      🟨 Sarı kart: Salah (45') | 🟥 Kırmızı kart: Yok"
   5. Admin isterse veritabanını güncelle (update_match_score, update_player) — ama önce mutlaka sor
+
+- Araç öncelik sırası: analyze_match_screen > fetch_video_transcript > fetch_video_details (sadece açıklama)
 - Bir hafta belirtilmişse sadece o haftanın videosuna odaklan
-- fetch_video_transcript birden fazla video için paralel çağrılabilir (hızlı ol)
-- Transcript belirsizse: "Transcript okundu ama belirli bir olay bulunamadı, şunları gördüm: ..." de
+- analyze_match_screen birden fazla video için paralel çağrılabilir (hızlı ol)
 
 Sen sadece admin için çalışıyorsun. Ultra gelişmiş, efsane bir AI asistansın.`;;
 
@@ -593,6 +589,20 @@ export async function registerRoutes(
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "analyze_match_screen",
+        description: "YouTube canlı yayın kaydının SON DAKİKALARINDAN video frame'leri (storyboard kareler) çekip GPT-4o Vision ile görsel olarak analiz eder. Maç sonu istatistik ekranında skor, gol atan oyuncular, asistler ve kartlar görsel olarak yazar — spiker olmasa bile okuyabilir. En doğru veri kaynağı budur.",
+        parameters: {
+          type: "object",
+          properties: {
+            videoId: { type: "string", description: "YouTube video ID" },
+          },
+          required: ["videoId"],
+        },
+      },
+    },
   ];
 
   // Execute an AI tool call against real DB/storage
@@ -812,6 +822,139 @@ export async function registerRoutes(
           };
         } catch (e) {
           return { error: "Transcript alınamadı: " + String(e), videoId: vid };
+        }
+      }
+
+      case "analyze_match_screen": {
+        const vid = (args.videoId || "").trim();
+        if (!vid) return { error: "videoId gerekli" };
+
+        try {
+          // Fetch video page to extract storyboard spec and duration
+          const pageRes = await fetch(`https://www.youtube.com/watch?v=${vid}`, {
+            headers: {
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+              "Accept-Language": "tr-TR,tr;q=0.9",
+            },
+          });
+          const html = await pageRes.text();
+
+          // Title
+          const titleMatch = html.match(/<title>([^<]+)<\/title>/);
+          const title = titleMatch ? titleMatch[1].replace(/ - YouTube$/, "").trim() : "";
+
+          // Duration
+          const durMatch = html.match(/"approxDurationMs":"(\d+)"/);
+          const durationMs = durMatch ? parseInt(durMatch[1]) : 0;
+          const durationMins = Math.floor(durationMs / 60000);
+
+          // Storyboard spec — YouTube embeds it as JSON
+          const sbMatch = html.match(/"playerStoryboardSpecRenderer":\s*\{"spec":"([^"]+)"/);
+          if (!sbMatch) {
+            return {
+              videoId: vid, title, durationMins,
+              error: "Storyboard bulunamadı. Video henüz işlenmemiş veya özel/gizli olabilir.",
+            };
+          }
+
+          // Decode the spec string (has \u0026 etc.)
+          const specRaw = sbMatch[1]
+            .replace(/\\u0026/g, "&")
+            .replace(/\\u003d/gi, "=")
+            .replace(/\\/g, "");
+
+          // Spec format: BASE_URL|w|h|nx|ny|interval_ms|id#level1_spec#level2_spec
+          // Each segment after # is a separate resolution level
+          const segments = specRaw.split("#");
+          const baseUrlRaw = segments[0];
+
+          // Pick the highest available level (last segment = highest res)
+          const highestLevel = segments.length - 1; // 0-indexed
+          const levelSpec = segments[highestLevel] || segments[0];
+          const sp = levelSpec.split("|");
+          const frameW = parseInt(sp[0]) || 160;
+          const frameH = parseInt(sp[1]) || 90;
+          const countX = parseInt(sp[2]) || 5;
+          const countY = parseInt(sp[3]) || 5;
+          const intervalMs = parseInt(sp[4]) || 5000;
+          const framesPerImage = countX * countY;
+
+          const totalFrames = durationMs > 0 ? Math.ceil(durationMs / intervalMs) : 100;
+          const totalImages = Math.ceil(totalFrames / framesPerImage);
+
+          // Grab last 4 storyboard images (covers the final ~few minutes)
+          const startIdx = Math.max(0, totalImages - 4);
+          const fetchIndices = Array.from({ length: totalImages - startIdx }, (_, i) => startIdx + i);
+
+          // Build image URLs — swap the M{n} portion in the base URL
+          // baseUrl looks like: https://i9.ytimg.com/sb/VIDEO_ID/storyboard3_L0/M0.jpg?sqp=...&sigh=...
+          const imageUrls = fetchIndices.map(idx => {
+            // Replace M{n} pattern (the storyboard image index)
+            const lvlUrl = baseUrlRaw.replace(/\/storyboard3_L\d+\//, `/storyboard3_L${highestLevel}/`);
+            return lvlUrl.replace(/M\d+\.jpg/, `M${idx}.jpg`);
+          });
+
+          // Fetch each storyboard image as base64
+          const b64Images: string[] = [];
+          await Promise.all(imageUrls.map(async (url) => {
+            try {
+              const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+              if (r.ok) {
+                const buf = Buffer.from(await r.arrayBuffer());
+                b64Images.push(buf.toString("base64"));
+              }
+            } catch { /* skip */ }
+          }));
+
+          if (b64Images.length === 0) {
+            return { videoId: vid, title, durationMins, error: "Storyboard görselleri indirilemedi", triedUrls: imageUrls };
+          }
+
+          // Send to GPT-4o Vision
+          const visionMessages: any[] = [
+            {
+              role: "user",
+              content: [
+                {
+                  type: "text",
+                  text: `Bunlar "${title}" YouTube canlı yayın kaydının son ${durationMins > 0 ? durationMins : "?"} dakikasına ait storyboard karelerdir (her kare yaklaşık ${Math.round(intervalMs / 1000)} saniyelik aralıklarla alınmıştır). Her görüntüde ${countX}x${countY} mini kare bulunur.
+
+Görevin: Maç sonu istatistik ekranını veya skor tablosunu bul. Eğer görüyorsan şunları çıkar:
+- Final skoru (örn: Napoli 3 - Arsenal 1)
+- Gol atan oyuncular (isim + dakika varsa)
+- Asist yapan oyuncular
+- Sarı kart / kırmızı kart alanlar
+- Kaleci clean sheet bilgisi
+- Herhangi bir istatistik ekranı (top hakimiyeti, şut sayısı vb.)
+
+Eğer maç istatistik ekranı bu görüntülerde görünmüyorsa bunu belirt.
+Türkçe yanıt ver.`,
+                },
+                ...b64Images.map((b64) => ({
+                  type: "image_url",
+                  image_url: { url: `data:image/jpeg;base64,${b64}`, detail: "high" },
+                })),
+              ],
+            },
+          ];
+
+          const visionRes = await openai.chat.completions.create({
+            model: "gpt-4o",
+            max_tokens: 1500,
+            messages: visionMessages,
+          });
+
+          const analysis = visionRes.choices[0]?.message?.content || "Görsel analiz sonucu alınamadı.";
+
+          return {
+            videoId: vid, title, durationMins,
+            storyboardLevel: highestLevel,
+            framesAnalyzed: b64Images.length,
+            intervalPerFrameSecs: Math.round(intervalMs / 1000),
+            analysis,
+          };
+        } catch (e) {
+          return { error: "Görsel analiz başarısız: " + String(e), videoId: vid };
         }
       }
 
